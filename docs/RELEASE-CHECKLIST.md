@@ -15,6 +15,6 @@ This is an experimental community prerelease authorized by the maintainer. **Pub
 - [ ] Human visual/animation/fall/audio acceptance recorded; no unapproved clip enabled.
 - [x] Independent technical review of D completed; two final P2 gate issues corrected and reviewed. Publication review identified missing interpreter/OpenSSL notices; F corrects those and rechecks the final build, integrity, normal startup and all tests. No independent whole-tree F re-audit is claimed. Separate rights/notice questions are not marked resolved.
 - [x] Maintainer requested an open public community publication on the authenticated adrianrivas44 account; label 1.0.0-rc.1, not stable.
-- [ ] Public push/release explicitly authorized, then destination read back and download tested.
+- [x] Public push/release explicitly authorized; repository, tag and prerelease read back. All three Release assets were then fully downloaded without authentication and their byte counts/SHA256 matched. Publication/download verification does not complete the unchecked human or rights items above.
 
 The Windows ZIP belongs in Release assets, not in Git history. Source, tests and build instructions belong in the repository. Do not upload private intake archives, internal operation reports or a developer's environment.
