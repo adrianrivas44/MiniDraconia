@@ -1,6 +1,6 @@
 # Draconia — character and visual reference
 
-These are **the MiniDraconia product's character documents**, not the private configuration of a deployed assistant. The maintainer authorized preparing them for sharing. They do not include an active account, personal conversations, credentials or access permissions.
+These are **the MiniDraconia product's character documents**, not the private configuration of a deployed assistant. The maintainer explicitly requested publishing them with this open community project. They do not include an active account, personal conversations, credentials or access permissions.
 
 ## Included references
 
@@ -21,4 +21,4 @@ Draconia is explicitly an adult fan-created reinterpretation inspired by Draco M
 
 Keep the established appearance and expressive character. Propose a specific dialogue/art change with its rationale and source. Avoid automatic rewrites into a generic assistant, repeated insults or escalating intimacy. Do not substitute another person's private soul or personal material.
 
-The original PDF labels its provenance as private-use fan material. Including it in a local release candidate is not a statement that all underlying character/art rights have been cleared for public redistribution. Resolve [rights-review](../RIGHTS-REVIEW.md) before publishing.
+The original PDF labels its provenance as private-use fan material. It is preserved unchanged as historical context; the maintainer subsequently requested sharing it publicly with the product soul. This does not establish that all underlying character/art rights have been cleared or relicense third-party material. Read the outstanding [rights review](../RIGHTS-REVIEW.md) before relying on or redistributing the assets.

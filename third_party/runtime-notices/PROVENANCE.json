@@ -1,0 +1,43 @@
+{
+  "versions": {
+    "Python": "3.11.15",
+    "OpenSSL": "3.5.7"
+  },
+  "files": [
+    {
+      "name": "Python-LICENSE.txt",
+      "bytes": 25066,
+      "sha256": "886a0ead2d89030ee62dbff52b04e47ab91998341295bb9c56fb952b4e081c7a",
+      "origin": "Copied unchanged from the LICENSE.txt accompanying the exact build interpreter, Python 3.11.15."
+    },
+    {
+      "name": "OpenSSL-LICENSE.txt",
+      "bytes": 10175,
+      "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
+      "url": "https://github.com/openssl/openssl/blob/openssl-3.5.7/LICENSE.txt",
+      "git_blob": "49cc83d2ee29d13453188217f0e4edd70c7f842f"
+    },
+    {
+      "name": "OpenSSL-AUTHORS.md",
+      "bytes": 1022,
+      "sha256": "b9f638dfc06b59c2d3b808186c3b30f713805a5db390f5b77b1703ac58acb83e",
+      "url": "https://github.com/openssl/openssl/blob/openssl-3.5.7/AUTHORS.md",
+      "git_blob": "5b036a0d8358167c87c7fa275cc671cd222dcce6"
+    }
+  ],
+  "runtime_dlls": {
+    "python311.dll": {
+      "sha256": "e61dc0a3c34f7b7b9b056f80370c9b10bce50576f50e90a5d4b15f4ce76ed088",
+      "bytes": 5843968
+    },
+    "libcrypto-3-x64.dll": {
+      "sha256": "54a96cf44a5ebe53e56e074a14d4d1774a194472b5ad041c96a1ab273c8cd336",
+      "bytes": 7986688
+    },
+    "libssl-3-x64.dll": {
+      "sha256": "9652d6e62cd7d0f412cc62d61255a2d391cf90bffcb3a010a6c86a3e012602e2",
+      "bytes": 1581568
+    }
+  },
+  "note": "Interpreter/OpenSSL version and bundled DLL hashes were verified against the build runtime. Official OpenSSL tag root has LICENSE.txt and AUTHORS.md, no separate NOTICE file. Existing third-party notices are preserved; this inventory does not certify all modules or character/asset rights."
+}

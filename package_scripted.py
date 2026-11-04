@@ -256,6 +256,31 @@ def _reference_symlink_free(path, base):
             return True
         current = current.parent
 
+def collect_runtime_notices(dest_dir, reference_dir=None, versions=None):
+    """Interpreter/OpenSSL are not wheels; preserve their versioned notices too."""
+    import ssl
+    base = Path(reference_dir) if reference_dir is not None else ROOT/'third_party'/'runtime-notices'
+    actual = versions if versions is not None else {'Python': sys.version.split()[0], 'OpenSSL': ssl.OPENSSL_VERSION.split()[1]}
+    provenance = json.loads((base/'PROVENANCE.json').read_text(encoding='utf-8'))
+    if provenance['versions'] != actual:
+        raise RuntimeError('Update runtime notice references for the actual interpreter/OpenSSL version')
+    rows = provenance['files']
+    required = {'Python-LICENSE.txt', 'OpenSSL-LICENSE.txt', 'OpenSSL-AUTHORS.md'}
+    if len(rows) != len(required) or {row['name'] for row in rows} != required:
+        raise RuntimeError('Invalid runtime notice inventory')
+    for row in rows:
+        path = base/row['name']
+        if not _reference_symlink_free(path, base) or not path.is_file() or record(path) != {key: row[key] for key in ('bytes', 'sha256')}:
+            raise RuntimeError('Invalid runtime notice file: '+row['name'])
+    dest = Path(dest_dir)/'runtime'
+    dest.mkdir(parents=True, exist_ok=True)
+    files = []
+    for row in rows:
+        shutil.copyfile(base/row['name'], dest/row['name'])
+        files.append(dict(row, dest='runtime/'+row['name']))
+    shutil.copyfile(base/'PROVENANCE.json', dest/'PROVENANCE.json')
+    return {'versions': actual, 'files': files}
+
 def verify_qt_reference(reference_dir=None, installed_versions=None):
     """Verify the committed Qt reference texts; returns one dict per verified file or raises RuntimeError.
 
@@ -626,6 +651,7 @@ def build(options):
     qt_notices = collect_license_notices(QT_NOTICE_DISTRIBUTIONS, notices_dir)
     qt_installed = {name: dist_version(name) for name in QT_NOTICE_DISTRIBUTIONS}
     qt_reference = collect_qt_reference_notices(notices_dir, installed_versions=qt_installed)
+    runtime_notices = collect_runtime_notices(notices_dir)
     other_notices, notices_missing = collect_optional_notices(OTHER_NOTICE_DISTRIBUTIONS, notices_dir)
     for name in REQUIRED_DOCS:
         if (ROOT/name).is_file() and (ROOT/name).stat().st_size:
@@ -652,6 +678,7 @@ def build(options):
                             for k, v in {**qt_notices, **other_notices}.items()},
         'license_notices_not_found': notices_missing,
         'qt_reference_notices': qt_reference,
+        'runtime_notices': runtime_notices,
     }
     _write_json(source/'BUILD-INPUTS.json', inputs)
     files = hash_tree(source, qt_inventory)

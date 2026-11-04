@@ -2,6 +2,12 @@
 
 Initial build target: Windows 11 x64 and Python 3.11. The inherited working toolchain used Python 3.11.15, PySide6 6.5.3 and PyInstaller 6.16.0. The dependency files and resulting build manifest are the authority for the candidate; a fresh install must be tested separately from reuse of a developer environment.
 
+The public build's runtime notice references cover **Python 3.11.15 and OpenSSL 3.5.7**. The builder verifies the actual interpreter/OpenSSL versions and all reference hashes before copying those notices. A different runtime requires updating the references and their provenance; do not bypass that check or silently reuse another version's notices.
+
+## Continuous-integration template
+
+The Windows test workflow is preserved at `.github/workflow-templates/windows-tests.yml`, but is **not active CI**. The credential available for this first publication could push source but could not install GitHub Actions workflows. No broader account permission was requested. A maintainer can activate it by copying the template to `.github/workflows/tests.yml` using an appropriately authorized GitHub session. Until that is done and a real run passes, local Windows verification is not a GitHub CI result.
+
 ## Install in a project-local environment (PowerShell)
 
 From the extracted/cloned repository root:
