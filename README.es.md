@@ -26,7 +26,7 @@ Descarga el ZIP de Windows de la [versión preliminar 1.0.0-rc.1](https://github
 
 Objetivo inicial: Windows 11 x64. No se afirma compatibilidad probada con otros sistemas. No debería necesitar permisos de administrador. Si Windows muestra una advertencia de reputación de software sin firmar, revisa el origen y el checksum; no desactives el antivirus.
 
-Lee las notas de la versión y compara su SHA256 antes de abrirla. El paquete público corresponde al snapshot congelado candidate-E, que añade los avisos verificados de Python/OpenSSL al candidato D anterior; la documentación comunitaria del repositorio puede ser posterior. La [lista de publicación](docs/RELEASE-CHECKLIST.md) distingue comprobaciones técnicas y limitaciones pendientes. Que esté disponible públicamente no significa que se hayan resuelto todas las preguntas de derechos o las revisiones humanas.
+Lee las notas de la versión y compara su SHA256 antes de abrirla. El paquete público corresponde al snapshot fuente adjunto a esa misma versión, con los avisos verificados de Python/OpenSSL; la documentación comunitaria del repositorio puede ser posterior. La [lista de publicación](docs/RELEASE-CHECKLIST.md) distingue comprobaciones técnicas y limitaciones pendientes. Que esté disponible públicamente no significa que se hayan resuelto todas las preguntas de derechos o las revisiones humanas.
 
 ## Colaborar
 

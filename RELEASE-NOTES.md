@@ -15,9 +15,9 @@ Es mi primera publicación de software y quiero aprender con la comunidad. Si ti
 ## Download and verification
 
 - Download the Windows x64 ZIP, extract the entire folder, and run `MiniDraconia/MiniDraconia.exe`. Keep `_internal` beside it. Do not disable your antivirus for an unsigned build.
-- The previous candidate-D baseline passed 200 Windows tests with one platform-specific skip. The public candidate-E build adds three regression tests and version/hash-verified interpreter/OpenSSL notices; its exact fresh suite and executable checks are recorded in the GitHub Release notes. These are automated/offscreen checks, not human visual/audio acceptance or a fresh Windows installation.
-- The original build-source snapshot and build receipt are supplied to identify exactly what produced the executable; the repository's community documentation was updated for public publication afterward. Older preparation wording inside those immutable snapshots is historical, not the current repository status.
-- Compare both public downloads against the `SHA256SUMS.txt` attached to the same GitHub prerelease. The earlier private candidate-D hashes do not identify the public candidate-E ZIP.
+- The previous candidate-D baseline passed 200 Windows tests with one platform-specific skip. The public build adds four regression tests and version/hash-verified interpreter/OpenSSL notices; its exact fresh suite and executable checks are recorded in the GitHub Release notes. These are automated/offscreen checks, not human visual/audio acceptance or a fresh Windows installation.
+- The build-source snapshot is supplied to identify exactly what produced the executable; the repository's community documentation may be newer. Internal execution receipts are retained privately, not shipped as operational logs.
+- Compare both public downloads against the `SHA256SUMS.txt` attached to the same GitHub prerelease. Earlier private candidate hashes do not identify this public ZIP.
 - The Windows test workflow is supplied as an inactive template, not claimed as green GitHub CI. See [development](docs/DEVELOPMENT.md) for activation instructions and the account-permission limitation.
 
 ## Intended correction

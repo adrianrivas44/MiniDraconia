@@ -34,7 +34,7 @@ Use the Windows ZIP attached to the [1.0.0-rc.1 prerelease](https://github.com/a
 
 Initial support target: **Windows 11 x64**. Other Windows versions, macOS and Linux are not validated targets for this candidate. No administrator access should be required to run the app. An unsigned build may trigger a Windows reputation warning; do not disable your antivirus to run it. Check the release checksum and provenance before deciding whether to trust a download.
 
-Read the release notes and compare the download's SHA256 before opening it. The public Windows build comes from the frozen candidate-E source, which adds verified Python/OpenSSL notices to the earlier candidate D; community-facing documentation in this repository may be newer. See [the release checklist](docs/RELEASE-CHECKLIST.md) for verified checks and remaining limitations. Public availability does not mean all rights questions or human acceptance checks have been resolved.
+Read the release notes and compare the download's SHA256 before opening it. The public Windows build comes from the source snapshot attached to the same prerelease, including verified Python/OpenSSL notices; community-facing documentation in this repository may be newer. See [the release checklist](docs/RELEASE-CHECKLIST.md) for verified checks and remaining limitations. Public availability does not mean all rights questions or human acceptance checks have been resolved.
 
 ## Develop and build
 

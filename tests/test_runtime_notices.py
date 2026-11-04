@@ -42,7 +42,7 @@ class RuntimeNotices(unittest.TestCase):
         for row in result['files']:
             self.assertEqual((dest / row['dest']).read_bytes(), (self.reference / row['name']).read_bytes())
             self.assertEqual(hashlib.sha256((dest / row['dest']).read_bytes()).hexdigest(), row['sha256'])
-        copied = dest / 'runtime' / 'PROVENANCE.json'
+        copied = dest / 'interpreter-openssl' / 'PROVENANCE.json'
         self.assertEqual(copied.read_bytes(), (self.reference / 'PROVENANCE.json').read_bytes())
 
     def test_corrupt_runtime_notice_is_rejected_before_any_copy(self):
@@ -60,6 +60,11 @@ class RuntimeNotices(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, 'runtime notice.*version'):
                     self.builder.collect_runtime_notices(dest, reference_dir=self.reference, versions=actual)
                 self.assertFalse(dest.exists())
+
+    def test_collected_notices_pass_the_unchanged_package_artifact_policy(self):
+        result = self.builder.collect_runtime_notices(self.base / 'output', reference_dir=self.reference, versions=self.versions)
+        for row in result['files']:
+            self.assertFalse(self.builder.forbidden_artifact('THIRD-PARTY-NOTICES/' + row['dest']), row['dest'])
 
 
 if __name__ == '__main__':

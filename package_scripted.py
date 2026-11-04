@@ -272,12 +272,12 @@ def collect_runtime_notices(dest_dir, reference_dir=None, versions=None):
         path = base/row['name']
         if not _reference_symlink_free(path, base) or not path.is_file() or record(path) != {key: row[key] for key in ('bytes', 'sha256')}:
             raise RuntimeError('Invalid runtime notice file: '+row['name'])
-    dest = Path(dest_dir)/'runtime'
+    dest = Path(dest_dir)/'interpreter-openssl'
     dest.mkdir(parents=True, exist_ok=True)
     files = []
     for row in rows:
         shutil.copyfile(base/row['name'], dest/row['name'])
-        files.append(dict(row, dest='runtime/'+row['name']))
+        files.append(dict(row, dest='interpreter-openssl/'+row['name']))
     shutil.copyfile(base/'PROVENANCE.json', dest/'PROVENANCE.json')
     return {'versions': actual, 'files': files}
 

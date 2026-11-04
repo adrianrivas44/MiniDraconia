@@ -14,6 +14,8 @@ The imported source was provided as a working directory, not a verified Git chec
 
 The dependency manifests identify versions for installation and build. A binary distribution must include the applicable notice/license texts for every bundled dependency, including Python, Qt/PySide6/shiboken, Fluent Widgets, Frameless Window, APScheduler, pynput and other collected libraries. Inspect the final binary manifest: a list of intended direct dependencies is not a full software bill of materials.
 
+The public candidate includes the exact build interpreter's Python 3.11.15 LICENSE, plus the official OpenSSL 3.5.7 LICENSE and AUTHORS, under `THIRD-PARTY-NOTICES/interpreter-openssl/`. Their source references, versions and hashes are preserved in `third_party/runtime-notices/PROVENANCE.json`; the bundled interpreter/OpenSSL DLLs were matched to the build runtime. Future builds fail if those notice references do not match the actual versions or hashes.
+
 The PySide6 6.5.3 wheel metadata inventory exposed commercial-reference text without the full open-source notice set. The candidate therefore also preserves official Qt/PySide 6.5.3 license reference texts and their provenance under `third_party/qt-6.5.3/` (and `THIRD-PARTY-NOTICES/qt-6.5.3-reference/` in the Windows package). These references do not establish the applicability or completeness of every Qt/Chromium component's notices. Build success and public availability are not legal clearance; contributions that verify and complete the component-by-component inventory are welcome.
 
 ## Character, art, audio and typography
