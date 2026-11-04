@@ -1,0 +1,200 @@
+[
+  {
+    "project": "pyside/pyside-setup",
+    "version": "6.5.3",
+    "commit": "2f27264a7a07e3d175afadbe9cb1a543df40cd2f",
+    "file": "pyside-setup/BSD-3-Clause.txt",
+    "url": "https://raw.githubusercontent.com/pyside/pyside-setup/2f27264a7a07e3d175afadbe9cb1a543df40cd2f/LICENSES/BSD-3-Clause.txt",
+    "bytes": 1469,
+    "sha256": "9f0490f18656c6f2435bd14f603ef0c96434d1825615363dce43abb42ed1dcce"
+  },
+  {
+    "project": "pyside/pyside-setup",
+    "version": "6.5.3",
+    "commit": "2f27264a7a07e3d175afadbe9cb1a543df40cd2f",
+    "file": "pyside-setup/GFDL-1.3-no-invariants-only.txt",
+    "url": "https://raw.githubusercontent.com/pyside/pyside-setup/2f27264a7a07e3d175afadbe9cb1a543df40cd2f/LICENSES/GFDL-1.3-no-invariants-only.txt",
+    "bytes": 22955,
+    "sha256": "110535522396708cea37c72a802c5e7e81391139f5f7985631c93ef242b206a4"
+  },
+  {
+    "project": "pyside/pyside-setup",
+    "version": "6.5.3",
+    "commit": "2f27264a7a07e3d175afadbe9cb1a543df40cd2f",
+    "file": "pyside-setup/GPL-2.0-only.txt",
+    "url": "https://raw.githubusercontent.com/pyside/pyside-setup/2f27264a7a07e3d175afadbe9cb1a543df40cd2f/LICENSES/GPL-2.0-only.txt",
+    "bytes": 18092,
+    "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+  },
+  {
+    "project": "pyside/pyside-setup",
+    "version": "6.5.3",
+    "commit": "2f27264a7a07e3d175afadbe9cb1a543df40cd2f",
+    "file": "pyside-setup/GPL-3.0-only.txt",
+    "url": "https://raw.githubusercontent.com/pyside/pyside-setup/2f27264a7a07e3d175afadbe9cb1a543df40cd2f/LICENSES/GPL-3.0-only.txt",
+    "bytes": 35147,
+    "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+  },
+  {
+    "project": "pyside/pyside-setup",
+    "version": "6.5.3",
+    "commit": "2f27264a7a07e3d175afadbe9cb1a543df40cd2f",
+    "file": "pyside-setup/LGPL-3.0-only.txt",
+    "url": "https://raw.githubusercontent.com/pyside/pyside-setup/2f27264a7a07e3d175afadbe9cb1a543df40cd2f/LICENSES/LGPL-3.0-only.txt",
+    "bytes": 7651,
+    "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"
+  },
+  {
+    "project": "pyside/pyside-setup",
+    "version": "6.5.3",
+    "commit": "2f27264a7a07e3d175afadbe9cb1a543df40cd2f",
+    "file": "pyside-setup/LicenseRef-Qt-Commercial.txt",
+    "url": "https://raw.githubusercontent.com/pyside/pyside-setup/2f27264a7a07e3d175afadbe9cb1a543df40cd2f/LICENSES/LicenseRef-Qt-Commercial.txt",
+    "bytes": 462,
+    "sha256": "9b1f50aae6267f9d5e0ceb6775ee86450262c25ec7c0573e151fe5d3f18a4700"
+  },
+  {
+    "project": "pyside/pyside-setup",
+    "version": "6.5.3",
+    "commit": "2f27264a7a07e3d175afadbe9cb1a543df40cd2f",
+    "file": "pyside-setup/Qt-GPL-exception-1.0.txt",
+    "url": "https://raw.githubusercontent.com/pyside/pyside-setup/2f27264a7a07e3d175afadbe9cb1a543df40cd2f/LICENSES/Qt-GPL-exception-1.0.txt",
+    "bytes": 965,
+    "sha256": "40678d338ce53cd93f8b22b281a2ecbcaa3ee65ce60b25ffb0c462b0530846b2"
+  },
+  {
+    "project": "qt/qtbase",
+    "version": "6.5.3",
+    "commit": "372eaedc5b8c771c46acc4c96e91bbade4ca3624",
+    "file": "qtbase/AFL-2.1.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtbase/372eaedc5b8c771c46acc4c96e91bbade4ca3624/LICENSES/AFL-2.1.txt",
+    "bytes": 8948,
+    "sha256": "93bb4f7417aa775bab9026cc3d0af28aeb64451fc5a8ec651876785edd8eaf9b"
+  },
+  {
+    "project": "qt/qtbase",
+    "version": "6.5.3",
+    "commit": "372eaedc5b8c771c46acc4c96e91bbade4ca3624",
+    "file": "qtbase/Apache-2.0.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtbase/372eaedc5b8c771c46acc4c96e91bbade4ca3624/LICENSES/Apache-2.0.txt",
+    "bytes": 10398,
+    "sha256": "e3ba223bb1423f0aad8c3dfce0fe3148db48926d41e6fbc3afbbf5ff9e1c89cb"
+  },
+  {
+    "project": "qt/qtbase",
+    "version": "6.5.3",
+    "commit": "372eaedc5b8c771c46acc4c96e91bbade4ca3624",
+    "file": "qtbase/BSD-3-Clause.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtbase/372eaedc5b8c771c46acc4c96e91bbade4ca3624/LICENSES/BSD-3-Clause.txt",
+    "bytes": 1469,
+    "sha256": "9f0490f18656c6f2435bd14f603ef0c96434d1825615363dce43abb42ed1dcce"
+  },
+  {
+    "project": "qt/qtbase",
+    "version": "6.5.3",
+    "commit": "372eaedc5b8c771c46acc4c96e91bbade4ca3624",
+    "file": "qtbase/BSL-1.0.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtbase/372eaedc5b8c771c46acc4c96e91bbade4ca3624/LICENSES/BSL-1.0.txt",
+    "bytes": 1340,
+    "sha256": "3abd6471b9a9a08d65ce771143f8e278bb4c1aeb10c1c2d476935a6b049653f5"
+  },
+  {
+    "project": "qt/qtbase",
+    "version": "6.5.3",
+    "commit": "372eaedc5b8c771c46acc4c96e91bbade4ca3624",
+    "file": "qtbase/CC0-1.0.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtbase/372eaedc5b8c771c46acc4c96e91bbade4ca3624/LICENSES/CC0-1.0.txt",
+    "bytes": 7048,
+    "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499"
+  },
+  {
+    "project": "qt/qtbase",
+    "version": "6.5.3",
+    "commit": "372eaedc5b8c771c46acc4c96e91bbade4ca3624",
+    "file": "qtbase/GFDL-1.3-no-invariants-only.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtbase/372eaedc5b8c771c46acc4c96e91bbade4ca3624/LICENSES/GFDL-1.3-no-invariants-only.txt",
+    "bytes": 22955,
+    "sha256": "110535522396708cea37c72a802c5e7e81391139f5f7985631c93ef242b206a4"
+  },
+  {
+    "project": "qt/qtbase",
+    "version": "6.5.3",
+    "commit": "372eaedc5b8c771c46acc4c96e91bbade4ca3624",
+    "file": "qtbase/GPL-2.0-only.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtbase/372eaedc5b8c771c46acc4c96e91bbade4ca3624/LICENSES/GPL-2.0-only.txt",
+    "bytes": 18092,
+    "sha256": "8177f97513213526df2cf6184d8ff986c675afb514d4e68a404010521b880643"
+  },
+  {
+    "project": "qt/qtbase",
+    "version": "6.5.3",
+    "commit": "372eaedc5b8c771c46acc4c96e91bbade4ca3624",
+    "file": "qtbase/GPL-2.0-or-later.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtbase/372eaedc5b8c771c46acc4c96e91bbade4ca3624/LICENSES/GPL-2.0-or-later.txt",
+    "bytes": 16,
+    "sha256": "ad80f2e4afb947abdca7f1c00fc36e5aca71b2bb20f0842581ee101731e4acc7"
+  },
+  {
+    "project": "qt/qtbase",
+    "version": "6.5.3",
+    "commit": "372eaedc5b8c771c46acc4c96e91bbade4ca3624",
+    "file": "qtbase/GPL-3.0-only.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtbase/372eaedc5b8c771c46acc4c96e91bbade4ca3624/LICENSES/GPL-3.0-only.txt",
+    "bytes": 35147,
+    "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903"
+  },
+  {
+    "project": "qt/qtbase",
+    "version": "6.5.3",
+    "commit": "372eaedc5b8c771c46acc4c96e91bbade4ca3624",
+    "file": "qtbase/LGPL-3.0-only.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtbase/372eaedc5b8c771c46acc4c96e91bbade4ca3624/LICENSES/LGPL-3.0-only.txt",
+    "bytes": 7651,
+    "sha256": "da7eabb7bafdf7d3ae5e9f223aa5bdc1eece45ac569dc21b3b037520b4464768"
+  },
+  {
+    "project": "qt/qtbase",
+    "version": "6.5.3",
+    "commit": "372eaedc5b8c771c46acc4c96e91bbade4ca3624",
+    "file": "qtbase/LicenseRef-BSD-3-Clause-with-PCRE2-Binary-Like-Packages-Exception.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtbase/372eaedc5b8c771c46acc4c96e91bbade4ca3624/LICENSES/LicenseRef-BSD-3-Clause-with-PCRE2-Binary-Like-Packages-Exception.txt",
+    "bytes": 1852,
+    "sha256": "0526625fcc746a42d3f19a0ab357d3dc8479fdbe3bfd168825498f50215c7a63"
+  },
+  {
+    "project": "qt/qtbase",
+    "version": "6.5.3",
+    "commit": "372eaedc5b8c771c46acc4c96e91bbade4ca3624",
+    "file": "qtbase/LicenseRef-Qt-Commercial.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtbase/372eaedc5b8c771c46acc4c96e91bbade4ca3624/LICENSES/LicenseRef-Qt-Commercial.txt",
+    "bytes": 462,
+    "sha256": "9b1f50aae6267f9d5e0ceb6775ee86450262c25ec7c0573e151fe5d3f18a4700"
+  },
+  {
+    "project": "qt/qtbase",
+    "version": "6.5.3",
+    "commit": "372eaedc5b8c771c46acc4c96e91bbade4ca3624",
+    "file": "qtbase/LicenseRef-SHA1-Public-Domain.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtbase/372eaedc5b8c771c46acc4c96e91bbade4ca3624/LICENSES/LicenseRef-SHA1-Public-Domain.txt",
+    "bytes": 144,
+    "sha256": "65d86b8ec6b1cd8b8f6e64fd8710274ba00d6a3c520e00dfdcd1c3d2071f3305"
+  },
+  {
+    "project": "qt/qtbase",
+    "version": "6.5.3",
+    "commit": "372eaedc5b8c771c46acc4c96e91bbade4ca3624",
+    "file": "qtbase/MIT.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtbase/372eaedc5b8c771c46acc4c96e91bbade4ca3624/LICENSES/MIT.txt",
+    "bytes": 1111,
+    "sha256": "d040359701c01996a017d5c515678929cd1b0625e64cb86db44025fbb6cdf1fc"
+  },
+  {
+    "project": "qt/qtbase",
+    "version": "6.5.3",
+    "commit": "372eaedc5b8c771c46acc4c96e91bbade4ca3624",
+    "file": "qtbase/Qt-GPL-exception-1.0.txt",
+    "url": "https://raw.githubusercontent.com/qt/qtbase/372eaedc5b8c771c46acc4c96e91bbade4ca3624/LICENSES/Qt-GPL-exception-1.0.txt",
+    "bytes": 965,
+    "sha256": "40678d338ce53cd93f8b22b281a2ecbcaa3ee65ce60b25ffb0c462b0530846b2"
+  }
+]

@@ -1,0 +1,153 @@
+{
+  "default": {
+    "images": "stand",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "right_walk": {
+    "images": "walkcycle_right",
+    "act_num": 2,
+    "need_move": true,
+    "direction": "right",
+    "frame_move": 3.5,
+    "frame_refresh": 0.08333333333333333
+  },
+  "left_walk": {
+    "images": "walkcycle_left",
+    "act_num": 2,
+    "need_move": true,
+    "direction": "left",
+    "frame_move": 3.5,
+    "frame_refresh": 0.08333333333333333
+  },
+  "greet": {
+    "images": "greet",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "bye": {
+    "images": "bye",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "talk": {
+    "images": "talk",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "happy": {
+    "images": "happy",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "angry": {
+    "images": "angry",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "shy": {
+    "images": "shy",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "bored": {
+    "images": "bored",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "think": {
+    "images": "think",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "read": {
+    "images": "read",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "stretch": {
+    "images": "stretch",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "wake": {
+    "images": "wake",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "patpat": {
+    "images": "patpat",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "touch_body": {
+    "images": "touch_body",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "pinch": {
+    "images": "pinch",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "onfloor": {
+    "images": "onfloor",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "spell": {
+    "images": "spell",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "tea": {
+    "images": "tea",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "hairflip": {
+    "images": "hairflip",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "slowclap": {
+    "images": "slowclap",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "doze": {
+    "images": "doze",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "sleep": {
+    "images": "sleep",
+    "act_num": 3,
+    "frame_refresh": 0.08333333333333333
+  },
+  "drag": {
+    "images": "drag",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "fall": {
+    "images": "fall",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "climb": {
+    "images": "climb",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "peek": {
+    "images": "peek_right",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "sit": {
+    "images": "sit",
+    "act_num": 4,
+    "frame_refresh": 0.32
+  }
+}

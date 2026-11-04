@@ -1,0 +1,77 @@
+{
+  "system": {
+    "sound": "silence.wav"
+  },
+  "status_hp": {
+    "sound": "silence.wav"
+  },
+  "status_fv": {
+    "sound": "silence.wav"
+  },
+  "status_coin": {
+    "sound": "silence.wav"
+  },
+  "start_tomato": {
+    "sound": "silence.wav"
+  },
+  "start_focus": {
+    "sound": "silence.wav"
+  },
+  "end_tomato": {
+    "sound": "silence.wav"
+  },
+  "end_focus": {
+    "sound": "silence.wav"
+  },
+  "cancel_tomato": {
+    "sound": "silence.wav"
+  },
+  "cancel_focus": {
+    "sound": "silence.wav"
+  },
+  "greeting_1": {
+    "sound": "silence.wav"
+  },
+  "greeting_2": {
+    "sound": "silence.wav"
+  },
+  "greeting_3": {
+    "sound": "silence.wav"
+  },
+  "greeting_4": {
+    "sound": "silence.wav"
+  },
+  "greeting_5": {
+    "sound": "silence.wav"
+  },
+  "feed_1": {
+    "sound": "silence.wav"
+  },
+  "feed_2": {
+    "sound": "silence.wav"
+  },
+  "feed_3": {
+    "sound": "silence.wav"
+  },
+  "bb_fv_lvlup": {
+    "sound": "silence.wav"
+  },
+  "bb_fv_drop": {
+    "sound": "silence.wav"
+  },
+  "bb_hp_low": {
+    "sound": "silence.wav"
+  },
+  "bb_hp_zero": {
+    "sound": "silence.wav"
+  },
+  "bb_feed_done": {
+    "sound": "silence.wav"
+  },
+  "bb_pat_focus": {
+    "sound": "silence.wav"
+  },
+  "bb_pat_frequent": {
+    "sound": "silence.wav"
+  }
+}

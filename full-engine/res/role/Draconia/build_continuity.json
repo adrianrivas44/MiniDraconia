@@ -1,0 +1,591 @@
+{
+  "reference": "default[0] == default[-1]",
+  "seams": {
+    "greet": {
+      "i": 4,
+      "j": 96,
+      "n": 97,
+      "peak": 68,
+      "start_diff": 12.43,
+      "end_diff": 11.27,
+      "faded_start": false,
+      "faded_end": false,
+      "entry_required": true,
+      "sin_arreglo_completo": true,
+      "n_src": 97
+    },
+    "bye": {
+      "i": 0,
+      "j": 86,
+      "n": 97,
+      "peak": 27,
+      "start_diff": 2.39,
+      "end_diff": 9.19,
+      "faded_start": false,
+      "faded_end": false,
+      "entry_required": true,
+      "sin_arreglo_completo": true,
+      "n_src": 97
+    },
+    "talk": {
+      "i": 1,
+      "j": 77,
+      "n": 97,
+      "peak": 61,
+      "start_diff": 1.34,
+      "end_diff": 5.12,
+      "faded_start": false,
+      "faded_end": true,
+      "entry_required": true,
+      "end_diff_post": 0.68,
+      "n_src": 97
+    },
+    "happy": {
+      "i": 1,
+      "j": 97,
+      "n": 97,
+      "peak": 31,
+      "start_diff": 1.97,
+      "end_diff": 3.96,
+      "faded_start": false,
+      "faded_end": false,
+      "entry_required": true,
+      "n_src": 97
+    },
+    "angry": {
+      "i": 0,
+      "j": 97,
+      "n": 97,
+      "peak": 56,
+      "start_diff": 1.54,
+      "end_diff": 8.2,
+      "faded_start": false,
+      "faded_end": false,
+      "entry_required": true,
+      "sin_arreglo_completo": true,
+      "n_src": 97
+    },
+    "shy": {
+      "i": 0,
+      "j": 84,
+      "n": 97,
+      "peak": 42,
+      "start_diff": 0.75,
+      "end_diff": 7.75,
+      "faded_start": false,
+      "faded_end": true,
+      "entry_required": true,
+      "end_diff_post": 1.04,
+      "n_src": 97
+    },
+    "bored": {
+      "i": 1,
+      "j": 95,
+      "n": 97,
+      "peak": 80,
+      "start_diff": 1.48,
+      "end_diff": 12.28,
+      "faded_start": false,
+      "faded_end": false,
+      "entry_required": true,
+      "sin_arreglo_completo": true,
+      "n_src": 97
+    },
+    "think": {
+      "i": 0,
+      "j": 97,
+      "n": 97,
+      "peak": 28,
+      "start_diff": 1.8,
+      "end_diff": 5.06,
+      "faded_start": false,
+      "faded_end": true,
+      "entry_required": true,
+      "end_diff_post": 0.66,
+      "n_src": 97
+    },
+    "read": {
+      "i": 0,
+      "j": 145,
+      "n": 145,
+      "peak": 22,
+      "start_diff": 2.91,
+      "end_diff": 3.73,
+      "faded_start": false,
+      "faded_end": false,
+      "entry_required": true,
+      "n_src": 145
+    },
+    "stretch": {
+      "i": 0,
+      "j": 97,
+      "n": 97,
+      "peak": 95,
+      "start_diff": 0.42,
+      "end_diff": 15.89,
+      "faded_start": false,
+      "faded_end": false,
+      "entry_required": true,
+      "sin_arreglo_completo": true,
+      "n_src": 97
+    },
+    "wake": {
+      "i": 0,
+      "j": 70,
+      "n": 97,
+      "peak": 46,
+      "start_diff": 3.94,
+      "end_diff": 11.12,
+      "faded_start": false,
+      "faded_end": false,
+      "entry_required": false,
+      "sin_arreglo_completo": true,
+      "n_src": 97
+    },
+    "patpat": {
+      "i": 0,
+      "j": 75,
+      "n": 97,
+      "peak": 50,
+      "start_diff": 1.14,
+      "end_diff": 10.71,
+      "faded_start": false,
+      "faded_end": false,
+      "entry_required": true,
+      "sin_arreglo_completo": true,
+      "n_src": 97
+    },
+    "touch_body": {
+      "i": 6,
+      "j": 68,
+      "n": 97,
+      "peak": 22,
+      "start_diff": 12.49,
+      "end_diff": 12.79,
+      "faded_start": false,
+      "faded_end": false,
+      "entry_required": true,
+      "sin_arreglo_completo": true,
+      "n_src": 97
+    },
+    "pinch": {
+      "i": 0,
+      "j": 97,
+      "n": 97,
+      "peak": 61,
+      "start_diff": 0.09,
+      "end_diff": 4.26,
+      "faded_start": false,
+      "faded_end": false,
+      "entry_required": true,
+      "n_src": 97
+    },
+    "onfloor": {
+      "i": 0,
+      "j": 84,
+      "n": 97,
+      "peak": 71,
+      "start_diff": 5.19,
+      "end_diff": 12.29,
+      "faded_start": false,
+      "faded_end": false,
+      "entry_required": false,
+      "sin_arreglo_completo": true,
+      "n_src": 97
+    },
+    "spell": {
+      "i": 0,
+      "j": 125,
+      "n": 145,
+      "peak": 118,
+      "start_diff": 0.94,
+      "end_diff": 6.07,
+      "faded_start": false,
+      "faded_end": true,
+      "entry_required": true,
+      "end_diff_post": 0.0,
+      "n_src": 145
+    },
+    "tea": {
+      "i": 0,
+      "j": 143,
+      "n": 145,
+      "peak": 83,
+      "start_diff": 3.01,
+      "end_diff": 4.89,
+      "faded_start": false,
+      "faded_end": false,
+      "entry_required": true,
+      "n_src": 145
+    },
+    "hairflip": {
+      "i": 0,
+      "j": 80,
+      "n": 97,
+      "peak": 42,
+      "start_diff": 1.05,
+      "end_diff": 8.91,
+      "faded_start": false,
+      "faded_end": false,
+      "entry_required": true,
+      "sin_arreglo_completo": true,
+      "n_src": 97
+    },
+    "slowclap": {
+      "i": 0,
+      "j": 97,
+      "n": 97,
+      "peak": 96,
+      "start_diff": 1.71,
+      "end_diff": 9.11,
+      "faded_start": false,
+      "faded_end": false,
+      "entry_required": true,
+      "sin_arreglo_completo": true,
+      "n_src": 97
+    }
+  },
+  "normalization": {
+    "idle": {
+      "n_src": 97,
+      "n": 97,
+      "scale": 0.5064,
+      "source_box": [
+        226,
+        54,
+        734,
+        915
+      ],
+      "standing_height": 856,
+      "normalized_height": 435
+    },
+    "walk": {
+      "n_src": 97,
+      "cycle": [
+        18,
+        34,
+        20.5
+      ],
+      "n": 16,
+      "scale": 0.5029,
+      "source_box": [
+        65,
+        50,
+        722,
+        917
+      ],
+      "standing_height": 863,
+      "normalized_height": 436
+    },
+    "greet": {
+      "n_src": 97,
+      "n": 97,
+      "scale": 0.4729,
+      "source_box": [
+        26,
+        0,
+        761,
+        922
+      ],
+      "standing_height": 856,
+      "normalized_height": 436
+    },
+    "bye": {
+      "n_src": 97,
+      "n": 97,
+      "scale": 0.5058,
+      "source_box": [
+        64,
+        58,
+        829,
+        920
+      ],
+      "standing_height": 856,
+      "normalized_height": 436
+    },
+    "talk": {
+      "n_src": 97,
+      "n": 97,
+      "scale": 0.5052,
+      "source_box": [
+        75,
+        52,
+        739,
+        915
+      ],
+      "standing_height": 857,
+      "normalized_height": 436
+    },
+    "happy": {
+      "n_src": 97,
+      "n": 97,
+      "scale": 0.5093,
+      "source_box": [
+        203,
+        59,
+        747,
+        915
+      ],
+      "standing_height": 856,
+      "normalized_height": 436
+    },
+    "angry": {
+      "n_src": 97,
+      "n": 97,
+      "scale": 0.504,
+      "source_box": [
+        206,
+        54,
+        772,
+        919
+      ],
+      "standing_height": 856,
+      "normalized_height": 436
+    },
+    "shy": {
+      "n_src": 97,
+      "n": 97,
+      "scale": 0.5064,
+      "source_box": [
+        221,
+        54,
+        757,
+        915
+      ],
+      "standing_height": 856,
+      "normalized_height": 435
+    },
+    "bored": {
+      "n_src": 97,
+      "n": 97,
+      "scale": 0.5076,
+      "source_box": [
+        227,
+        56,
+        744,
+        915
+      ],
+      "standing_height": 856,
+      "normalized_height": 436
+    },
+    "think": {
+      "n_src": 97,
+      "n": 97,
+      "scale": 0.5093,
+      "source_box": [
+        77,
+        59,
+        744,
+        915
+      ],
+      "standing_height": 856,
+      "normalized_height": 436
+    },
+    "read": {
+      "n_src": 145,
+      "n": 145,
+      "scale": 0.5011,
+      "source_box": [
+        0,
+        45,
+        748,
+        915
+      ],
+      "standing_height": 857,
+      "normalized_height": 435
+    },
+    "stretch": {
+      "n_src": 97,
+      "n": 97,
+      "scale": 0.5064,
+      "source_box": [
+        196,
+        55,
+        744,
+        916
+      ],
+      "standing_height": 856,
+      "normalized_height": 435
+    },
+    "wake": {
+      "n_src": 97,
+      "n": 97,
+      "scale": 0.4983,
+      "source_box": [
+        38,
+        40,
+        800,
+        915
+      ],
+      "standing_height": 856,
+      "normalized_height": 436
+    },
+    "headpat": {
+      "n_src": 97,
+      "n": 97,
+      "scale": 0.504,
+      "source_box": [
+        172,
+        50,
+        790,
+        915
+      ],
+      "standing_height": 858,
+      "normalized_height": 436
+    },
+    "surprised": {
+      "n_src": 97,
+      "n": 97,
+      "scale": 0.4734,
+      "source_box": [
+        4,
+        0,
+        875,
+        921
+      ],
+      "standing_height": 856,
+      "normalized_height": 436
+    },
+    "pout": {
+      "n_src": 97,
+      "n": 97,
+      "scale": 0.5064,
+      "source_box": [
+        123,
+        54,
+        746,
+        915
+      ],
+      "standing_height": 856,
+      "normalized_height": 435
+    },
+    "land": {
+      "n_src": 97,
+      "n": 97,
+      "scale": 0.4938,
+      "source_box": [
+        53,
+        40,
+        960,
+        923
+      ],
+      "standing_height": 857,
+      "normalized_height": 436
+    },
+    "raised": {
+      "n_src": 97,
+      "n": 96,
+      "scale": 0.4955,
+      "source_box": [
+        169,
+        34,
+        820,
+        914
+      ],
+      "standing_height": 856,
+      "normalized_height": 436
+    },
+    "fall": {
+      "n_src": 97,
+      "n": 96,
+      "scale": 0.4542,
+      "source_box": [
+        0,
+        0,
+        882,
+        960
+      ],
+      "standing_height": 856,
+      "normalized_height": 436
+    },
+    "broom": {
+      "n_src": 97,
+      "n": 96,
+      "scale": 0.5093,
+      "source_box": [
+        12,
+        59,
+        946,
+        893
+      ],
+      "standing_height": 856,
+      "normalized_height": 424
+    },
+    "peek": {
+      "n_src": 97,
+      "n": 49,
+      "scale": 0.4971,
+      "source_box": [
+        403,
+        48,
+        832,
+        925
+      ],
+      "standing_height": 856,
+      "normalized_height": 436
+    },
+    "spell": {
+      "n_src": 145,
+      "n": 145,
+      "scale": 0.507,
+      "source_box": [
+        89,
+        55,
+        739,
+        915
+      ],
+      "standing_height": 856,
+      "normalized_height": 436
+    },
+    "tea": {
+      "n_src": 145,
+      "n": 145,
+      "scale": 0.5,
+      "source_box": [
+        0,
+        43,
+        857,
+        915
+      ],
+      "standing_height": 857,
+      "normalized_height": 436
+    },
+    "hairflip": {
+      "n_src": 97,
+      "n": 97,
+      "scale": 0.5076,
+      "source_box": [
+        66,
+        56,
+        946,
+        915
+      ],
+      "standing_height": 856,
+      "normalized_height": 436
+    },
+    "slowclap": {
+      "n_src": 97,
+      "n": 97,
+      "scale": 0.5076,
+      "source_box": [
+        185,
+        56,
+        738,
+        915
+      ],
+      "standing_height": 856,
+      "normalized_height": 436
+    },
+    "doze": {
+      "stable_frame": 119,
+      "scale": 0.5093
+    },
+    "sleep": {
+      "stable_frame": 119,
+      "scale": 0.5093
+    },
+    "sit": {
+      "src": "sit_fixed.png"
+    }
+  }
+}

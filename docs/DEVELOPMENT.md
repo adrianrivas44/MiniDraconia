@@ -1,0 +1,61 @@
+# Development and Windows packaging
+
+Initial build target: Windows 11 x64 and Python 3.11. The inherited working toolchain used Python 3.11.15, PySide6 6.5.3 and PyInstaller 6.16.0. The dependency files and resulting build manifest are the authority for the candidate; a fresh install must be tested separately from reuse of a developer environment.
+
+## Install in a project-local environment (PowerShell)
+
+From the extracted/cloned repository root:
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe scripts\run_tests.py
+```
+
+These commands are for a separate MiniDraconia environment, not for an existing agent/runtime environment. No model weights, Ollama, Kokoro or ONNX inference stack is required for scripted mode. The present manifests are pinned/bounded from a known toolchain, not a claim that every new machine has reproduced the installation.
+
+## Run from source
+
+```powershell
+.\.venv\Scripts\python.exe full-engine\packaging\portable_entry.py
+```
+
+Run through `portable_entry.py`, which initializes the per-user profile. Do not start the engine module directly and then work around missing profile setup by writing state into the source folder.
+
+## Tests and source hygiene
+
+```powershell
+.\.venv\Scripts\python.exe scripts\run_tests.py
+.\.venv\Scripts\python.exe scripts\scan_release.py
+```
+
+The test runner creates a fresh isolated profile and sets offscreen/mute before Qt imports. A skipped Qt test is not a successful Windows/UI test; read the final counts and exceptions. The scanner reports paths/types/counts, not secret values. Its legal-review list does not certify rights.
+
+## Build the Windows ZIP
+
+```powershell
+.\.venv\Scripts\python.exe package_scripted.py --preflight-only
+.\.venv\Scripts\python.exe package_scripted.py --build-id my-unique-build
+```
+
+Choose a new build id for each attempt. The builder refuses to overwrite an existing build. It needs the repository's README, LICENSE and RELEASE-NOTES. Do not use `--allow-missing-docs` for a complete public release: that flag deliberately marks a package incomplete.
+
+A coordinator with an existing, separately reviewed PyInstaller folder can supply `--buildtools <absolute-folder>`. That is optional; no private machine path is required by the public build. Never add your private environment or buildtools directory to Git.
+
+The builder writes the candidate ZIP, checksum and build receipt under `dist/`, plus detailed evidence under `work/<build-id>/`. It checks QtQml resource provenance against installed wheel RECORD data, package paths/symlinks, CRC and complete extracted-file hashes. It executes **both** modes of the exact extracted executable:
+
+- `--startup-smoke --report <absolute-new-file>`: the normal app construction and real event loop, with an isolated profile and automated exit.
+- `--selftest-scripted --report <absolute-new-file>`: separate scripted interaction audit.
+
+Reports and profiles must be fresh, absolute and outside the installation; the smoke report is also outside its profile. The builder supplies these paths automatically. Runtime checks use a path with spaces and do not inherit the developer's PYTHONPATH.
+
+## Layout
+
+- `full-engine/run_DyberPet.py`: inherited application and real normal startup.
+- `full-engine/packaging/`: portable entry and PyInstaller specification.
+- `full-engine/DyberPet/`: behavior, UI, profile paths and startup evidence probe.
+- `full-engine/data/` and `full-engine/res/`: required default data/resources, not user state.
+- `tests/`: behavior and packaging regression tests.
+- `docs/identity/`: product soul and visual reference, not an active assistant profile.
+
+Preserve upstream attribution and the corresponding source of every binary release. Do not claim byte-for-byte reproducible EXEs without a reproducibility experiment; versioned inputs and hashes establish provenance, not deterministic compiler output. Final licensing, human visual/audio and publication checks remain in the release checklist.

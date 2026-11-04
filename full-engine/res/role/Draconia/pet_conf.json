@@ -1,0 +1,455 @@
+{
+  "width": 515,
+  "height": 460,
+  "scale": 1.0,
+  "refresh": 5,
+  "interact_speed": 0.02,
+  "default": "default",
+  "up": "default",
+  "down": "default",
+  "left": "left_walk",
+  "right": "right_walk",
+  "drag": "drag",
+  "fall": "fall",
+  "prefall": "drag",
+  "on_floor": "onfloor",
+  "patpat": "patpat",
+  "random_act": [
+    {
+      "name": "Stand",
+      "act_list": [
+        "default"
+      ],
+      "act_prob": 1.0,
+      "act_type": [
+        2,
+        0
+      ]
+    },
+    {
+      "name": "default",
+      "act_list": [
+        "default"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "WalkRight",
+      "act_list": [
+        "right_walk",
+        "default"
+      ],
+      "act_prob": 0.2,
+      "act_type": [
+        2,
+        1
+      ]
+    },
+    {
+      "name": "WalkLeft",
+      "act_list": [
+        "left_walk",
+        "default"
+      ],
+      "act_prob": 0.2,
+      "act_type": [
+        2,
+        1
+      ]
+    },
+    {
+      "name": "left_walk",
+      "act_list": [
+        "left_walk"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "right_walk",
+      "act_list": [
+        "right_walk"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "greet",
+      "act_list": [
+        "greet"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "bye",
+      "act_list": [
+        "bye"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "talk",
+      "act_list": [
+        "talk"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "happy",
+      "act_list": [
+        "happy"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "angry",
+      "act_list": [
+        "angry"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "shy",
+      "act_list": [
+        "shy"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "bored",
+      "act_list": [
+        "bored"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "think",
+      "act_list": [
+        "think"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "read",
+      "act_list": [
+        "read"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "stretch",
+      "act_list": [
+        "stretch"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "wake",
+      "act_list": [
+        "wake"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "patpat",
+      "act_list": [
+        "patpat"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "touch_body",
+      "act_list": [
+        "touch_body"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "pinch",
+      "act_list": [
+        "pinch"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "onfloor",
+      "act_list": [
+        "onfloor"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "spell",
+      "act_list": [
+        "spell"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "tea",
+      "act_list": [
+        "tea"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "hairflip",
+      "act_list": [
+        "hairflip"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "slowclap",
+      "act_list": [
+        "slowclap"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "doze",
+      "act_list": [
+        "doze"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "Sleep",
+      "act_list": [
+        "doze",
+        "sleep"
+      ],
+      "act_prob": 0.04,
+      "act_type": [
+        1,
+        1
+      ]
+    },
+    {
+      "name": "sleep",
+      "act_list": [
+        "sleep"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "drag",
+      "act_list": [
+        "drag"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "fall",
+      "act_list": [
+        "fall"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "climb",
+      "act_list": [
+        "climb"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "peek",
+      "act_list": [
+        "peek"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "sit",
+      "act_list": [
+        "sit"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "onfloor",
+      "act_list": [
+        "onfloor"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        10000
+      ]
+    },
+    {
+      "name": "Happy",
+      "act_list": [
+        "happy"
+      ],
+      "act_prob": 0.1,
+      "act_type": [
+        2,
+        1
+      ]
+    },
+    {
+      "name": "Sit",
+      "act_list": [
+        "sit",
+        "default"
+      ],
+      "act_prob": 0.06,
+      "act_type": [
+        2,
+        1
+      ]
+    },
+    {
+      "name": "Read",
+      "act_list": [
+        "read",
+        "default"
+      ],
+      "act_prob": 0.06,
+      "act_type": [
+        2,
+        1
+      ]
+    },
+    {
+      "name": "Think",
+      "act_list": [
+        "think",
+        "default"
+      ],
+      "act_prob": 0.06,
+      "act_type": [
+        2,
+        1
+      ]
+    },
+    {
+      "name": "Stretch",
+      "act_list": [
+        "stretch",
+        "default"
+      ],
+      "act_prob": 0.04,
+      "act_type": [
+        2,
+        1
+      ]
+    }
+  ]
+}

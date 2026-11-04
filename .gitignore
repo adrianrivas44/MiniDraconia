@@ -1,0 +1,47 @@
+# Personal environments
+.venv/
+venv/
+env/
+.python-version
+
+# Credentials and keys (never commit)
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+credentials*
+secrets*
+.git-credentials
+.netrc
+.pypirc
+
+# Agent/editor local state
+.claude/
+.idea/
+.vscode/
+
+# Runtime state, logs, caches
+profiles/
+profile/
+logs/
+*.log
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.coverage
+
+# Build tooling, outputs and evidence (kept out of the public tree)
+/work/
+/dist/
+/build/
+/buildtools/
+/staging/
+/evidence/
+*.spec.bak

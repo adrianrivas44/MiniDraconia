@@ -1,0 +1,21 @@
+name: Improvement idea
+description: Suggest a focused improvement
+title: "[Idea]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior and alternatives
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Privacy, assets, dependencies or model access involved?
+      description: Do not include credentials. A chat subscription does not prove API access.

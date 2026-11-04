@@ -1,0 +1,7 @@
+# Tests and Windows build tooling. Tests use only the standard library (unittest).
+-r requirements.txt
+
+# PyInstaller: the spec uses the 6.x onedir layout (_internal/). 6.16.0 is the version verified
+# from the Windows environment's installed dist metadata; the build also records the version it
+# actually ran in BUILD-INPUTS.json. A fresh install from this file has NOT been reproduced yet.
+PyInstaller==6.16.0

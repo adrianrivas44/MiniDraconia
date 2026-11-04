@@ -1,0 +1,11 @@
+{
+  "default_pet": "Draconia",
+  "language_code": "en_US",
+  "usertag_dict": {
+    "Draconia": ""
+  },
+  "fixdragspeedx": 1.0,
+  "fixdragspeedy": 1.0,
+  "gravity": 0.1,
+  "volume": 0
+}

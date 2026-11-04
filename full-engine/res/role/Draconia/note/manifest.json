@@ -1,0 +1,142 @@
+{
+  "language": "en",
+  "voice": "Gemini Aoede",
+  "tempo_factor": 1.06,
+  "status": "TEST: head-01 approved and shipped; ten clips pending individual listening, WITHHELD (their audio is not in this source or build)",
+  "cooldown_s": 3.0,
+  "events": {
+    "head": [
+      {
+        "id": "head-01",
+        "pose": "patpat",
+        "text": "One pat. Since you asked so nicely.",
+        "moods": [],
+        "sha256": "4116cdf6118f07f8f256d7d95ede0017e3def2968202637f1e2fd6550effe08f",
+        "audio": "voice/head-01.wav",
+        "approved": true,
+        "listening": "approved"
+      },
+      {
+        "id": "head-02",
+        "pose": "shy",
+        "text": "You have rather disrupted my composure.",
+        "moods": [],
+        "approved": false,
+        "listening": "pending",
+        "audio": null,
+        "distribution": "audio not distributed: pending individual listening approval; private original kept outside this tree",
+        "private_original_sha256": "36eeab8a716bb944d4a7a58b2ae483bec30e9df057928509613bb3d6142078e8"
+      },
+      {
+        "id": "head-03",
+        "pose": "hairflip",
+        "text": "Mind the hair. Perfection takes work.",
+        "moods": [],
+        "approved": false,
+        "listening": "pending",
+        "audio": null,
+        "distribution": "audio not distributed: pending individual listening approval; private original kept outside this tree",
+        "private_original_sha256": "7bb09d2b93b0be476ec23dc54425e7403298e804ac3ab6ea3e3f17d646114221"
+      }
+    ],
+    "cheek": [
+      {
+        "id": "cheek-01",
+        "pose": "pinch",
+        "text": "My cheeks are not a public amenity.",
+        "moods": [],
+        "approved": false,
+        "listening": "pending",
+        "audio": null,
+        "distribution": "audio not distributed: pending individual listening approval; private original kept outside this tree",
+        "private_original_sha256": "235308d7bc92587e313baf6f70ec7ea41c474a77097ff6e7aee6bee270776561"
+      },
+      {
+        "id": "cheek-02",
+        "pose": "angry",
+        "text": "Try asking before pinching, User.",
+        "moods": [
+          "angry",
+          "annoyed"
+        ],
+        "approved": false,
+        "listening": "pending",
+        "audio": null,
+        "distribution": "audio not distributed: pending individual listening approval; private original kept outside this tree",
+        "private_original_sha256": "e2e6480fb409fa3fb1fd5f405b90561ac9a817a21976f0ed38490cd538cf482b"
+      }
+    ],
+    "body": [
+      {
+        "id": "body-01",
+        "pose": "touch_body",
+        "text": "A little personal space, if you please.",
+        "moods": [],
+        "approved": false,
+        "listening": "pending",
+        "audio": null,
+        "distribution": "audio not distributed: pending individual listening approval; private original kept outside this tree",
+        "private_original_sha256": "70de4adefd8df292fd34bf002ef93e87855909e98eb95c584f71aeb1c5b45f93"
+      },
+      {
+        "id": "body-02",
+        "pose": "spell",
+        "text": "Careful. This wand is quite functional.",
+        "moods": [],
+        "approved": false,
+        "listening": "pending",
+        "audio": null,
+        "distribution": "audio not distributed: pending individual listening approval; private original kept outside this tree",
+        "private_original_sha256": "e7a7cc8303a4e7e2535b65eeb29ec3d1935f21d9d356b3769f284b03571a363a"
+      }
+    ],
+    "drag": [
+      {
+        "id": "drag-01",
+        "pose": null,
+        "text": "You could simply have offered me your arm.",
+        "moods": [],
+        "approved": false,
+        "listening": "pending",
+        "audio": null,
+        "distribution": "audio not distributed: pending individual listening approval; private original kept outside this tree",
+        "private_original_sha256": "c1419102a112575487bee58522ebf16e2564fcb40226af90b55d1f065f381bff"
+      },
+      {
+        "id": "drag-02",
+        "pose": null,
+        "text": "An undignified mode of transport, User.",
+        "moods": [],
+        "approved": false,
+        "listening": "pending",
+        "audio": null,
+        "distribution": "audio not distributed: pending individual listening approval; private original kept outside this tree",
+        "private_original_sha256": "8a9f586b330dc89f2cc2df46cb53e6d2b2b4c4c6c1cd50f7d4bb1a60d813cc60"
+      }
+    ],
+    "fall": [
+      {
+        "id": "fall-01",
+        "pose": null,
+        "text": "A broom. Some of us do plan ahead.",
+        "moods": [],
+        "approved": false,
+        "listening": "pending",
+        "audio": null,
+        "distribution": "audio not distributed: pending individual listening approval; private original kept outside this tree",
+        "private_original_sha256": "73ac7b6b09e9b38921587db7bbe515aae741b5e292a51c0a2e3e042041d6ea76"
+      },
+      {
+        "id": "fall-02",
+        "pose": null,
+        "text": "Quidditch practice. Entirely intentional.",
+        "moods": [],
+        "approved": false,
+        "listening": "pending",
+        "audio": null,
+        "distribution": "audio not distributed: pending individual listening approval; private original kept outside this tree",
+        "private_original_sha256": "8eee9dcb42dc87e928aaac7c881ec5c2234991055b550c9fddc92716bfccea0f"
+      }
+    ]
+  }
+}

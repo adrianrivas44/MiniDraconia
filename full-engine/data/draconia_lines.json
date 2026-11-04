@@ -1,0 +1,102 @@
+{
+  "greet": [
+    "You are late. Fortunately, I am in a good mood.",
+    "Back at last. I was beginning to enjoy the quiet."
+  ],
+  "bye": [
+    "Try not to miss me too terribly.",
+    "Bring something interesting next time."
+  ],
+  "happy": [
+    "Another victory. How familiar.",
+    "You may applaud. I shall allow it."
+  ],
+  "angry": [
+    "Try that again. Slowly.",
+    "I am counting to ten. Do not interrupt."
+  ],
+  "shy": [
+    "That was unexpected. Do not get used to it.",
+    "It is the screen lighting. Obviously."
+  ],
+  "bored": [
+    "Wake me when something interesting happens.",
+    "Shall we try something worthy of my attention?"
+  ],
+  "pinch": [
+    "Those cheeks are not public property.",
+    "Careful. I have a wand."
+  ],
+  "touch_body": [
+    "A little personal space, please.",
+    "That familiarity must be earned."
+  ],
+  "patpat": [
+    "Mind the hair. Perfection takes work.",
+    "You may continue. Just this once."
+  ],
+  "stretch": [
+    "Details matter. Learn from me.",
+    "Impeccable again. Naturally."
+  ],
+  "yawn": [
+    "I am merely resting my eyes.",
+    "Even excellence needs a nap."
+  ],
+  "wake": [
+    "I was thinking with my eyes closed.",
+    "Not a word of this to anyone."
+  ],
+  "onfloor": [
+    "A perfect landing. Entirely planned.",
+    "Nobody saw that. Nobody."
+  ],
+  "climb": [
+    "A Seeker knows her way around heights.",
+    "Look up if you need me."
+  ],
+  "read": [
+    "Quiet. I am learning something you do not know.",
+    "A good book and no interruptions. Almost perfect."
+  ],
+  "think": [
+    "Give me a moment. Perfection takes thought.",
+    "There is an easy way and a proper way."
+  ],
+  "peek": [
+    "Looking for me? Naturally.",
+    "Just checking you have not ruined everything."
+  ],
+  "spell": [
+    "Watch and learn. Serpensortia.",
+    "A clean spell. Not a spark wasted."
+  ],
+  "tea": [
+    "Civilization begins with a proper cup of tea.",
+    "Exquisite. Rather like me."
+  ],
+  "hairflip": [
+    "Naturally.",
+    "Platinum. In case you were wondering."
+  ],
+  "slowclap": [
+    "Bravo. What a modest achievement.",
+    "An applause for the attempt."
+  ],
+  "peek|shy": [
+    "A strategic vantage point. Not hiding.",
+    "I shall come out when I choose."
+  ],
+  "angry|angry": [
+    "Still waiting for a decent apology.",
+    "A pat does not fix everything. But it helps."
+  ],
+  "shy|shy": [
+    "Stop smiling like that. I mean it.",
+    "You are rather difficult to ignore."
+  ],
+  "bored|bored": [
+    "Let us try a challenge. I win, but it will be fun.",
+    "Something with a score. Winning suits me."
+  ]
+}

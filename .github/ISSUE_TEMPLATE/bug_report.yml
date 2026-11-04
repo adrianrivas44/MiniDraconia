@@ -1,0 +1,37 @@
+name: Bug report
+description: Report a reproducible MiniDraconia problem
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include secrets, private messages or full AppData folders. Sanitize paths and crop screenshots. Security issue? Use SECURITY.md instead of posting details here."
+  - type: input
+    id: version
+    attributes:
+      label: MiniDraconia version and source
+      description: Release ZIP or source? Which version/build?
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version and architecture
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual result
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized diagnostic or cropped screenshot
+      description: Review for usernames, tokens and personal data first.

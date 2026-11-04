@@ -1,0 +1,28 @@
+# MiniDraconia 1.0.0-rc.1 runtime (scripted offline). Windows, Python 3.11 only for the initial build.
+# Versions are those of the verified working environment; a fresh install from this file has NOT been reproduced yet.
+# Intentionally absent: onnxruntime, kokoro-onnx, scipy, soundfile and any model/inference stack (not part of scripted mode).
+
+# Qt (pinned together; PySide6 is the umbrella wheel for Essentials + Addons)
+PySide6==6.5.3
+PySide6-Essentials==6.5.3
+PySide6-Addons==6.5.3
+shiboken6==6.5.3
+
+# UI toolkit imported by the product (qfluentwidgets, qframelesswindow)
+PySide6-Fluent-Widgets==1.5.4
+PySideSix-Frameless-Window==0.8.2
+darkdetect==0.8.0
+
+# Imported directly by the product
+APScheduler==3.11.3
+tzlocal==5.4.4
+tzdata==2026.5
+pynput==1.8.2
+six==1.17.0
+tendo==0.3.0
+pywin32==312; sys_platform == "win32"
+
+# Present in the verified environment; MiniDraconia code does not import them directly.
+# Kept because PySide6-Fluent-Widgets image utilities may import them; minimal set UNVERIFIED.
+numpy==1.26.4
+pillow==12.3.0
