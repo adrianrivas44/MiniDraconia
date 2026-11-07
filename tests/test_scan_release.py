@@ -85,10 +85,20 @@ class ScanTree(unittest.TestCase):
         self.assertNotIn(('oversize', 'ok.bin'), found)
 
     def test_private_paths_are_warnings_to_review_not_blockers(self):
-        self.put('notes.py', '# see D:/Aiu/Lab/Draconia/x and /root/projects/y\n')
+        self.put('notes.py', '# see C:/Users/someone/Lab/x and /root/projects/y\n')
+        self.put('win.py', '# see D:\\Users\\someone\\x\n')
+        self.put('home.py', '# see /home/someone/x\n')
         report = self.scan.scan_tree(self.root)
         self.assertEqual(report['findings'], [])
-        self.assertIn(('private-path', 'notes.py'), self.rules(report, 'review'))
+        for name in ('notes.py', 'win.py', 'home.py'):
+            self.assertIn(('private-path', name), self.rules(report, 'review'))
+
+    def test_generic_patterns_name_no_machine_folder(self):
+        # D2.4: only generic private paths are built in; a maintainer's own folder names are markers.
+        self.put('lab.py', '# see D:/Lab/Secret/x\n')
+        report = self.scan.scan_tree(self.root)
+        self.assertEqual(report['findings'], [])
+        self.assertEqual(report['review'], [])
 
     def test_legal_unknowns_are_listed_separately_and_never_asserted_ok(self):
         self.put('full-engine/res/role/Draconia/a.png', b'png', binary=True)

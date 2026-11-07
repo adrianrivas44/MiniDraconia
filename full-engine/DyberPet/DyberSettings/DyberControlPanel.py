@@ -47,7 +47,8 @@ class ControlMainWindow(FluentWindow):
     def initWindow(self):
         #self.setMinimumSize(minWidth, minHeight)
         #self.resize(1000, 800)
-        self.setWindowIcon(QIcon(os.path.join(basedir, "res/icons/SystemPanel.png")))
+        from DyberPet.app_icon import app_icon
+        self.setWindowIcon(app_icon(basedir))         # D2.1: the app icon (Settings window)
         self.setWindowTitle(self.tr('MiniDraconia'))
 
         desktop = QApplication.primaryScreen().availableGeometry() #QApplication.desktop().availableGeometry()

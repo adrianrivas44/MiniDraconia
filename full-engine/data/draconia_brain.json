@@ -10,22 +10,10 @@
     "volume": 0.8
   },
   "behavior_weights": {
-    "idle": 0.15,
-    "walk": 0.12,
-    "follow_cursor": 0.03,
-    "sleep": 0.0,
-    "spell": 0.12,
-    "tea": 0.1,
-    "hairflip": 0.1,
-    "slowclap": 0.08,
-    "read": 0.08,
-    "think": 0.08,
-    "stretch": 0.08,
-    "sit": 0.06,
-    "happy": 0.08,
-    "greet": 0.06,
-    "talk": 0.06,
-    "bye": 0.04
+    "idle": 0.55,
+    "walk": 0.25,
+    "follow_cursor": 0.1,
+    "sleep": 0.015
   },
   "director_tick_s": [
     5.0,
@@ -42,16 +30,6 @@
       "slowclap": 0.5,
       "spell": 0.5
     }
-  },
-  "own_idle_poses": {
-    "spell": 0.45,
-    "tea": 0.26,
-    "hairflip": 0.45,
-    "slowclap": 0.25,
-    "read": 0.05,
-    "think": 0.04,
-    "stretch": 0.04,
-    "sit": 0.05
   },
   "mood": {
     "spell": {
@@ -81,6 +59,15 @@
     "happy": {
       "happy": 2.0,
       "excited": 1.6
+    },
+    "mirror": {
+      "happy": 1.8,
+      "excited": 1.8,
+      "sleepy": 0.5
+    },
+    "quill": {
+      "content": 1.8,
+      "excited": 0.6
     },
     "angry": {
       "angry": 3.0,
@@ -122,8 +109,8 @@
     "prob": 0.35,
     "speed": 40.0,
     "hold_s": [
-      5.0,
-      20.0
+      2.5,
+      10.0
     ]
   },
   "enabled": false

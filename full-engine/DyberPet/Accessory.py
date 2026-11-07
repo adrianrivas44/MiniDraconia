@@ -31,6 +31,18 @@ from DyberPet.conf import *
 from DyberPet.custom_widgets import DPDialogue, MenuSlider
 from DyberPet.utils import SubPet_Manager
 import DyberPet.settings as settings
+
+
+def _pet_frame_w():
+    """M3: logical width of the main pet's current frame (frames are display-ready)."""
+    from DyberPet.frames import shown_size
+    return shown_size(settings.current_img, settings.pet_display_scale)[0]
+
+
+def _pet_frame_h():
+    """M3: logical height of the main pet's current frame."""
+    from DyberPet.frames import shown_size
+    return shown_size(settings.current_img, settings.pet_display_scale)[1]
 '''
 try:
     size_factor = 1 #ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100
@@ -387,8 +399,8 @@ class QAccessory(QWidget):
             self.previous_anchor = [int(i) for i in self.anchor[0]]
             self.current_anchor = [int(i) for i in self.anchor[0]]
         else:
-            self.previous_anchor = [int(i * settings.tunable_scale) for i in self.anchor[0]]
-            self.current_anchor = [int(i * settings.tunable_scale) for i in self.anchor[0]]
+            self.previous_anchor = [int(i * settings.pet_display_scale) for i in self.anchor[0]]
+            self.current_anchor = [int(i * settings.pet_display_scale) for i in self.anchor[0]]
         self.set_img()
 
         self.current_act = None
@@ -452,8 +464,8 @@ class QAccessory(QWidget):
                 width_tmp = self.current_img.width()
                 height_tmp = self.current_img.height()
             else:
-                width_tmp = self.current_img.width()*settings.tunable_scale
-                height_tmp = self.current_img.height()*settings.tunable_scale
+                width_tmp = self.current_img.width()*settings.pet_display_scale
+                height_tmp = self.current_img.height()*settings.pet_display_scale
             # HighDPI-compatible scaling solution
             self.label.setFixedSize(width_tmp, height_tmp)
             self.label.setPixmap(self.current_img)
@@ -549,7 +561,7 @@ class QAccessory(QWidget):
             self.previous_img = self.current_img
             self.current_img = img
             self.previous_anchor = self.current_anchor
-            tunable_scale = 1 if self.acc_act.get('name','') == 'heart' else settings.tunable_scale
+            tunable_scale = 1 if self.acc_act.get('name','') == 'heart' else settings.pet_display_scale
             self.current_anchor = [int(i * tunable_scale) for i in self.anchor[self.act_id]]
 
     def Action(self):
@@ -644,7 +656,7 @@ class QAccessory(QWidget):
         else:
             self.move_right = False
 
-        if max(1,self.speed_follow_main*settings.tunable_scale) >= ((movement_x**2 + movement_y**2)**0.5):
+        if max(1,self.speed_follow_main*settings.pet_display_scale) >= ((movement_x**2 + movement_y**2)**0.5):
             #plus_x = movement_x
             #plus_y = movement_y
             self.move_right = False
@@ -887,15 +899,15 @@ class SubPet(QWidget):
         # If it follows main, move it to the position according to anchor
         if self.follow_main_x and not self.follow_main_y:
             direction_factor = 1 if self.anchor_to_main[0]>0 else -1
-            self.move( pos_x + (direction_factor*settings.current_img.width()//2*settings.tunable_scale + self.anchor_to_main[0]), 
+            self.move( pos_x + (direction_factor*_pet_frame_w()//2 + self.anchor_to_main[0]), 
                        self.pos().y())
-            self.destination = [pos_x + (direction_factor*settings.current_img.width()//2*settings.tunable_scale + self.anchor_to_main[0]), 
+            self.destination = [pos_x + (direction_factor*_pet_frame_w()//2 + self.anchor_to_main[0]), 
                                 self.pos().y()]
         elif self.follow_main_x and self.follow_main_y:
-            self.move( pos_x + (settings.current_img.width()//2*settings.tunable_scale + self.anchor_to_main[0]*self.tunable_scale), 
-                       pos_y + (-settings.current_img.height()*settings.tunable_scale  + self.anchor_to_main[1]*self.tunable_scale))
-            self.destination = [pos_x + (settings.current_img.width()//2*settings.tunable_scale + self.anchor_to_main[0]*self.tunable_scale), 
-                                pos_y + (-settings.current_img.height()*settings.tunable_scale  + self.anchor_to_main[1]*self.tunable_scale)]
+            self.move( pos_x + (_pet_frame_w()//2 + self.anchor_to_main[0]*self.tunable_scale), 
+                       pos_y + (-_pet_frame_h()  + self.anchor_to_main[1]*self.tunable_scale))
+            self.destination = [pos_x + (_pet_frame_w()//2 + self.anchor_to_main[0]*self.tunable_scale), 
+                                pos_y + (-_pet_frame_h()  + self.anchor_to_main[1]*self.tunable_scale)]
         else:
             # Assign a random position to subpets that are independent of main
             self.move(int(self.current_screen.topLeft().x() + random.uniform(0.4,0.7)*self.screen_width), self.pos().y())
@@ -1108,12 +1120,12 @@ class SubPet(QWidget):
         if self.follow_main:
             if self.follow_main_x and not self.follow_main_y:
                 direction_factor = 1 if self.anchor_to_main[0]>0 else -1
-                x_new = pos_x + (direction_factor*settings.current_img.width()//2*settings.tunable_scale + self.anchor_to_main[0])
+                x_new = pos_x + (direction_factor*_pet_frame_w()//2 + self.anchor_to_main[0])
                 y_new = self.pos().y()
 
             elif self.follow_main_x and self.follow_main_y:
-                x_new = pos_x + (settings.current_img.width()//2*settings.tunable_scale + self.anchor_to_main[0]*self.tunable_scale)
-                y_new = pos_y + (-settings.current_img.height()*settings.tunable_scale  + self.anchor_to_main[1]*self.tunable_scale)
+                x_new = pos_x + (_pet_frame_w()//2 + self.anchor_to_main[0]*self.tunable_scale)
+                y_new = pos_y + (-_pet_frame_h()  + self.anchor_to_main[1]*self.tunable_scale)
 
             else:
                 x_new = self.pos().x()

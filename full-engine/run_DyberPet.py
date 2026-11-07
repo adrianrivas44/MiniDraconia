@@ -67,6 +67,9 @@ class DyberPetApp(QApplication):
         self.installTranslator(fluentTranslator)
         # MiniDraconia uses English source strings, never the zh_CN catalog.
         self.setApplicationName('MiniDraconia')
+        # D2.1: the app icon for every window without its own (res/icons/app.ico / app.png).
+        from DyberPet.app_icon import app_icon
+        self.setWindowIcon(app_icon(settings.BASEDIR))
         if settings.themeColor:
             setThemeColor(settings.themeColor)
         

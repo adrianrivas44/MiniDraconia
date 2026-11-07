@@ -49,6 +49,8 @@ class ScriptedProduct(unittest.TestCase):
         from DyberPet.brain import save_preferences
         with self.assertRaisesRegex(ValueError, 'not available'):
             save_preferences('connect_my_ai', '', '')
+        with self.assertRaisesRegex(ValueError, 'not available'):
+            save_preferences('builtin_local', '', '')
 
     def test_legacy_entry_points_never_ping(self):
         from DyberPet import local_brain
@@ -57,23 +59,42 @@ class ScriptedProduct(unittest.TestCase):
             self.assertIsNone(local_brain.chat('hello', {'enabled':True}))
             self.assertIsNone(local_brain.chat_with_messages([], {'enabled':True}))
 
-    def test_ui_only_two_modes_and_unavailable_byo(self):
-        from PySide6.QtWidgets import QApplication
+    def test_ui_shows_offline_mode_by_default_and_own_key_defaults(self):
+        """REVISED (D2.4): 'Connect your own AI' points at no provider. A new profile is offline,
+        says so in plain words, and leaves the base URL and model empty with neutral placeholders
+        (no key). Without encryption a key cannot be saved, but Save stays available for a
+        server on this computer, which needs none."""
+        from PySide6.QtWidgets import QApplication, QLineEdit
         from DyberPet.DyberSettings.AIPrivacyUI import AIPrivacyInterface
+        from DyberPet.key_store import KeyStore
+        from DyberPet.paths import user_root
         app = QApplication.instance() or QApplication([])
-        view = AIPrivacyInterface()
-        self.assertEqual(view.provider.count(), 2)
-        self.assertEqual(view.provider.itemText(0), 'Scripted offline')
-        view.provider.setCurrentIndex(1)
-        self.assertFalse(view.save.isEnabled())
-        self.assertIn('not available', view.status.text().lower())
+        view = AIPrivacyInterface(store=KeyStore(user_root()/'ui-test.dpapi', codec=None),
+                                  tester=lambda *a: self.fail('no request without a click'))
+        self.assertIn('offline', view.mode_label.text().lower())
+        self.assertIn('nothing is sent', view.mode_label.text().lower())
+        self.assertEqual(view.endpoint.text(), '')
+        self.assertEqual(view.model.text(), '')
+        self.assertEqual(view.endpoint.placeholderText(), 'https://your-endpoint.example/v1')
+        self.assertEqual(view.model.placeholderText(), 'provider/model-name')
+        self.assertEqual(view.daily_cap.value(), 200)
+        self.assertEqual(view.api_key.echoMode(), QLineEdit.Password)
+        self.assertEqual(view.api_key.text(), '')
+        self.assertIn('cannot be stored', view.key_state.text())
+        view.endpoint.setText('https://hosted.example/v1')
+        view.model.setText('vendor/model')
+        view.api_key.setText('sk-typed-but-unstorable')
+        view.save.click()
+        self.assertIn('not saved', view.status.text().lower())
+        self.assertNotIn('sk-typed-but-unstorable', view.status.text())
+        self.assertFalse((user_root()/'ui-test.dpapi').exists(), 'no encryption available: a key cannot be saved')
         view.close()
 
     def test_real_qt_chat_signal_and_pet_event_methods(self):
         from DyberPet.brain.selftest import exercise
         result = exercise()
         self.assertEqual(result['qt_chat_sent'], 1)
-        self.assertEqual(result['pet_event_bubbles'], 2)
+        self.assertEqual(result['pet_event_bubbles'], 3)   # greeting, typed chat, goodbye
         self.assertEqual(result['network_attempts'], 0)
 
 
@@ -96,8 +117,10 @@ class OfflineCloseProduct(unittest.TestCase):
         self.assertTrue(callable(getattr(selftest, 'exercise_product', None)), 'missing no-chat product acceptance')
         result = selftest.exercise_product()
         self.assertEqual(result['touch_zones'], ['head', 'cheek', 'body'])
-        self.assertEqual(result['menu'], ['Settings', 'Quit'])
+        # REVISED (D2): typed chat and the climb switch are back in her menu; offline answers chat.
+        self.assertEqual(result['menu'], ['Settings', 'Talk to Draconia', 'Climb walls', 'Quit'])
         self.assertEqual(result['drag_bubbles'], 1)
+        self.assertEqual(result['chat_bubbles'], 1)
         self.assertEqual(result['network_attempts'], 0)
         self.assertEqual(result['audio_play_calls'], 0)
         self.assertEqual(result['persisted_volume'], 0.4)

@@ -1,4 +1,10 @@
-"""Offline Draconia reactions. No synthesis, network, mood writes or physics."""
+"""Draconia's touch/drag/fall reactions: pose choice, line gate and approved clips.
+
+No synthesis, network, mood writes or physics. Without a `speak` hook the controller shows the
+manifest text and plays an approved clip itself (v1 behaviour). With `speak(event, entry,
+audio_path)` the pet decides where the line comes from (DyberPet/pet_conversation.py);
+`audio_path` is given only for an approved clip that may be heard now (not muted, volume > 0).
+"""
 from __future__ import annotations
 
 import json
@@ -10,7 +16,7 @@ from pathlib import Path
 
 class Reactions:
     def __init__(self, note_dir, *, bubble=lambda text: None,
-                 play=lambda path, volume: None, is_playing=lambda: False, rng=None):
+                 play=lambda path, volume: None, is_playing=lambda: False, rng=None, speak=None):
         self.note_dir = Path(note_dir).resolve()
         try:
             manifest = json.loads((self.note_dir / 'manifest.json').read_text(encoding='utf-8'))
@@ -19,6 +25,7 @@ class Reactions:
         self.events = manifest.get('events', {})
         self.cooldown = max(3.0, float(manifest.get('cooldown_s', 3)))
         self.bubble, self.play, self.is_playing = bubble, play, is_playing
+        self.speak = speak
         self.rng = rng or random.Random()
         self.last_visual = {}
         self.last_spoken = {}
@@ -68,13 +75,24 @@ class Reactions:
             entry = chosen if chosen in spoken else self.rng.choice(spoken)
             self.last_time = now
             self.last_spoken[event] = entry
-            self.bubble(entry['text'])
+            if self.speak is None:
+                self.bubble(entry['text'])
             path = self._audio_path(entry)
+            voiced_entry = entry
             if path == self.last_audio:
                 alternatives = [(e, self._audio_path(e)) for e in spoken]
                 alternatives = [(e, p) for e, p in alternatives if p and p != self.last_audio]
-                path = self.rng.choice(alternatives)[1] if alternatives else path
-            if path and not muted and volume > 0:
+                if alternatives:
+                    voiced_entry, path = self.rng.choice(alternatives)
+            audible = bool(path) and not muted and volume > 0
+            if self.speak is not None:
+                # The clip and its own text always belong to the same manifest entry.
+                if audible:
+                    self.last_audio = path
+                    self.speak(event, voiced_entry, path)
+                else:
+                    self.speak(event, entry, None)
+            elif audible:
                 self.play(path, max(0.0, min(1.0, float(volume))))
                 self.last_audio = path
         return chosen.get('pose')
@@ -101,7 +119,8 @@ def make_qt_reactions(widget, note_dir):
         effect.play()
 
     controller = Reactions(note_dir, bubble=widget._draconia_bubble,
-                           play=play, is_playing=effect.isPlaying)
+                           play=play, is_playing=effect.isPlaying,
+                           speak=getattr(widget, '_conv_reaction_line', None))
     controller.effect = effect
     controller.stop = effect.stop
     return controller

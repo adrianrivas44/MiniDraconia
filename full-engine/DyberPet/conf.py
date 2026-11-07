@@ -11,6 +11,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QPixmap
 
 from .utils import get_file_time, find_dir_with_subdir, convert_fv_versions
+from .frames import FrameStore
 
 from DyberPet.paths import resource_root, user_root, initialize_user_data
 basedir = str(resource_root())
@@ -466,7 +467,7 @@ def CheckCharFiles(folder):
 
 
 class Act:
-    def __init__(self, images=(), act_name=None, act_num=1, need_move=False, direction=None, frame_move=10, frame_refresh=0.04, anchor=[0,0]):
+    def __init__(self, images=(), act_name=None, act_num=1, need_move=False, direction=None, frame_move=10, frame_refresh=0.04, anchor=[0,0], step_ends=()):
         """
         动作
         :param images: 动作图像
@@ -484,6 +485,8 @@ class Act:
         self.frame_move = frame_move
         self.frame_refresh = frame_refresh
         self.anchor = anchor
+        # M3.3: last frame of each step (both feet planted), so a walk can stop between steps.
+        self.step_ends = tuple(int(i) for i in (step_ends or ()))
 
     @classmethod
     def init_act(cls, conf_param, pic_dict, scale, pet_name, resFolder='role', act_name=None):
@@ -496,11 +499,19 @@ class Act:
             [pattern.match(os.path.basename(file)).group(1) for file in list_images if pattern.match(os.path.basename(file))],
             key=lambda x: int(x)
         )
-        img = []
-        for i in matching_idx:
-            img.append(pic_dict["%s_%s"%(images, i)])
+        names = ["%s_%s"%(images, i) for i in matching_idx]
+        # Optional `frames`: indexes of the frames to play (e.g. [0] holds one picture of a
+        # short clip whose frames would otherwise alternate and flicker).
+        picked = conf_param.get('frames')
+        if isinstance(picked, list) and picked:
+            names = [names[int(i)] for i in picked if isinstance(i, int) and 0 <= i < len(names)] or names
+        if isinstance(pic_dict, FrameStore):
+            # M3: frames are decoded when the action first plays, already at display size.
+            img = pic_dict.frames(names)
+        else:
+            img = [pic_dict[name] for name in names]
 
-        if scale != 1:
+        if scale != 1 and not isinstance(pic_dict, FrameStore):
             img = [i.scaled(int(i.width() * scale), 
                             int(i.height() * scale),
                             aspectMode=Qt.KeepAspectRatio,
@@ -512,7 +523,8 @@ class Act:
         frame_move = conf_param.get('frame_move', 10) * scale
         frame_refresh = conf_param.get('frame_refresh', 0.5)
         anchor = conf_param.get('anchor', [0,0])
-        return Act(img, act_name, act_num, need_move, direction, frame_move, frame_refresh, anchor)
+        step_ends = conf_param.get('step_ends', ())
+        return Act(img, act_name, act_num, need_move, direction, frame_move, frame_refresh, anchor, step_ends)
     
     def customized_copy(self, start_idx, end_idx, num_rep):
         imgs = self.images * int(self.act_num)

@@ -99,6 +99,10 @@ def init():
     # Make img-to-show a global variable for multi-thread behaviors
     current_img = None #QPixmap()
     previous_img = None #Pixmap()
+    global pet_display_scale
+    # M3: on-screen scale of the pet's frames (Pet Scale capped so frames are never
+    # upscaled on dense screens); the per-frame walk/climb movement is scaled by it.
+    pet_display_scale = 1.0
     global current_anchor, previous_anchor
     current_anchor = [0,0]
     previous_anchor = [0,0]

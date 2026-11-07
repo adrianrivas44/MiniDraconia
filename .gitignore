@@ -20,6 +20,13 @@ secrets*
 .git-credentials
 .netrc
 .pypirc
+# A self-hosted relay seed, an own AI key file and a voice pack: added beside your own
+# executable, never in Git or the public ZIP
+minidraconia_relay.json
+*.dpapi
+voice_pack/
+# A maintainer's own private markers for scripts/scan_release.py (one literal per line)
+.release-private-markers
 
 # Agent/editor local state
 .claude/

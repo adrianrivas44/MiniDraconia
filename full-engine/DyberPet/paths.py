@@ -1,5 +1,6 @@
 """Resource root and per-user writable state; no state in the source tree."""
 import os
+import sys
 from pathlib import Path
 import shutil
 
@@ -30,4 +31,16 @@ def initialize_user_data():
         dst = target/name
         if src.is_file() and not dst.exists():
             shutil.copyfile(src, dst)
+    # A self-hosted relay (advanced): minidraconia_relay.json placed beside the executable is
+    # copied into the profile on the first run (never over an existing copy). The public ZIP
+    # has none (docs/SELF-HOSTED-RELAY.md).
+    from DyberPet.brain_client import seed_relay_config
+    seed_relay_config(target, install_dir())
     return target
+
+
+def install_dir():
+    """Folder of the executable (frozen build) or the repository root (source run)."""
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).resolve().parent
+    return resource_root().parent

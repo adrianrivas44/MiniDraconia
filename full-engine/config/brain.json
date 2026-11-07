@@ -1,5 +1,9 @@
 {
-  "_status": "NOT READ by the application: informational only. This build is scripted offline (no model, no inference runtime, no network, no provider). The effective defaults are returned by load_config() in DyberPet/brain/__init__.py and match the values below.",
+  "_status": "NOT READ by the application: informational only. These are the effective defaults of the AI preference file (ai.json in the user profile), returned by load_config() in DyberPet/brain/__init__.py (DEFAULT_CONFIG): offline lines until the user connects their own AI in Settings. No endpoint or model is preset: both stay empty until the user fills them in (see docs/CONNECT-YOUR-AI.md). The key itself is never stored here or in ai.json.",
   "provider": "offline_phrases",
-  "connect_my_ai": {"provider": "", "model": "", "base_url": "", "available": false}
+  "own_key": {
+    "base_url": "",
+    "model": "",
+    "daily_cap": 200
+  }
 }

@@ -10,7 +10,7 @@ base por minuto transcurrido (energy sigue un ciclo circadiano en vez de
 una base fija). De los ejes se deriva una emocion dominante.
 
 No toca local_brain.py / mia_chat.py / mia_proxy.py / run_DyberPet.py (en
-paralelo corre el contrato del cerebro Grok). Para pedir frases al LLM se
+paralelo corre el contrato del cerebro remoto). Para pedir frases al LLM se
 sigue usando la API que ya existe en DyberPet.py (`_mia_ask`).
 """
 from __future__ import annotations

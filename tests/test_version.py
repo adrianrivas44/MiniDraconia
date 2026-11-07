@@ -16,11 +16,11 @@ SEMVER = re.compile(r'^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$')
 
 class VersionFile(unittest.TestCase):
     def test_version_file_is_the_release_candidate(self):
-        self.assertEqual((REPO / 'VERSION').read_text(encoding='utf-8').strip(), '1.0.0-rc.1')
+        self.assertEqual((REPO / 'VERSION').read_text(encoding='utf-8').strip(), '1.0.0-rc.2')
 
     def test_reader_returns_the_file_content(self):
         from DyberPet.version import read_version
-        self.assertEqual(read_version(), '1.0.0-rc.1')
+        self.assertEqual(read_version(), '1.0.0-rc.2')
 
     def test_reader_prefers_resource_root_then_parent(self):
         from DyberPet.version import read_version
@@ -52,7 +52,7 @@ class VersionFile(unittest.TestCase):
         spec = importlib.util.spec_from_file_location('package_scripted_version', REPO / 'package_scripted.py')
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        self.assertEqual(module.read_version(), '1.0.0-rc.1')
+        self.assertEqual(module.read_version(), '1.0.0-rc.2')
         self.assertRegex(module.read_version(), SEMVER)
 
     def test_settings_exposes_version_without_hardcoding_it(self):

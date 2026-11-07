@@ -14,9 +14,9 @@ This is a list of improvement areas, not a delivery schedule or a claim that the
 - More varied, context-appropriate English offline reactions.
 - Clear onboarding and recoverable preferences.
 
-## Connect your own model — future, not implemented
+## Connect your own model
 
-Explore optional Anthropic/Claude and xAI connectors while keeping the default offline. Start with a design covering credential storage, consent, costs, timeouts, supported APIs and data leaving the machine. A paid chat subscription is not proof of API entitlement. Never bundle a maintainer's token or route users through an undocumented shared account.
+Done in 1.0.0-rc.2: an optional connector for any OpenAI-compatible endpoint, with no provider preset, local servers without a key, an encrypted key, a daily request limit, timeouts and an offline fallback; the default stays offline. A self-hosted relay (advanced) and an optional voice pack are documented for anyone to build. Next: clearer usage display, more endpoint compatibility reports from the community, and testing with real hosted and local servers. A paid chat subscription is not proof of API entitlement. Never bundle a maintainer's token or route users through an undocumented shared account.
 
 ## Character contributions
 

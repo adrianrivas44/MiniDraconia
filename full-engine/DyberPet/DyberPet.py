@@ -30,6 +30,9 @@ from DyberPet.bubbleManager import BubbleManager
 from DyberPet.local_brain import LocalBrain, save_default_config, chat_with_messages
 from DyberPet.throw import throw_velocity  # lanzamiento: calculo puro compartido
 from DyberPet.mia_chat import ChatBox, ChatHistory, ask_mia, load_chat_config, bubble_duration_s, build_mia_chat_bubble
+from DyberPet.pet_life import PetLifeMixin, walking_toward as life_walking_toward
+from DyberPet.pet_conversation import ConversationMixin
+from DyberPet import frames as pet_frames
 
 # initialize settings
 import DyberPet.settings as settings
@@ -368,7 +371,7 @@ class _MiaChatWorker(QObject):
         self.finished.emit(self._fn())
 
 
-class PetWidget(QWidget):
+class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
     setup_notification = Signal(str, str, name='setup_notification')
     setup_bubbleText = Signal(dict, int, int, name="setup_bubbleText")
     close_bubble = Signal(str, name="close_bubble")
@@ -459,6 +462,8 @@ class PetWidget(QWidget):
         #self._set_menu(pets)
         #self._set_tray()
         self.show()
+        # M3.2: one line with the screen, its devicePixelRatio and her shown scale.
+        self._life_log_screen()
 
         self._setup_ui()
 
@@ -601,6 +606,7 @@ class PetWidget(QWidget):
                 if settings.set_fall:
                     settings.onfloor=0
                 settings.draging=1
+                self._life_walk_end()            # M3.2: a walk ends when she is picked up
                 self.workers['Animation'].pause()
                 self.workers['Interaction'].start_interact('mousedrag')
                 # Mia: animo (contrato mia-mood punto 2) -- la arrastran.
@@ -628,9 +634,7 @@ class PetWidget(QWidget):
 
             else:
 
-                anim_area = QRect(self.pos() + QPoint(self.width()//2-self.label.width()//2, 
-                                                      self.height()-self.label.height()), 
-                                  QSize(self.label.width(), self.label.height()))
+                anim_area = self._life_sprite_rect()
                 intersected = self.current_screen.intersected(anim_area)
                 area = intersected.width() * intersected.height() / self.label.width() / self.label.height()
                 if area > 0.5:
@@ -673,7 +677,9 @@ class PetWidget(QWidget):
                     self._move_customized(0,0)
                     settings.current_img = self.pet_conf.default.images[0]
                     self.set_img()
-                    self.workers['Animation'].resume()
+                    # M3.2: while she says a line the random animation stays paused.
+                    if not self._life_holds_animation():
+                        self.workers['Animation'].resume()
             self.mouse_moving = False
 
 
@@ -724,7 +730,9 @@ class PetWidget(QWidget):
     def _init_ui(self):
         # The Character ----------------------------------------------------------------------------
         self.label = QLabel(self)
-        self.label.setScaledContents(True)
+        # M3: frames arrive already at the label's exact physical size (DyberPet/frames.py);
+        # scaled contents would let Qt resample (and upscale) them on dense screens.
+        self.label.setScaledContents(False)
         self.label.setAlignment(Qt.AlignBottom | Qt.AlignHCenter)
         self.label.installEventFilter(self)
         #self.label.setStyleSheet("border : 2px solid blue")
@@ -929,6 +937,8 @@ class PetWidget(QWidget):
 
     def _set_Statusmenu(self):
         self.setWindowTitle(self.tr('MiniDraconia'))
+        from DyberPet.app_icon import app_icon
+        self.setWindowIcon(app_icon(basedir))         # D2.1: the pet window's icon
 
         # Character Name
         self.statusTitle = QWidget()
@@ -1116,9 +1126,29 @@ class PetWidget(QWidget):
         self.StatMenu.addActions([self.mia_mood_menu_entry])
         self.StatMenu.addSeparator()
 
-        self.StatMenu.clear()
+        # RoundMenu.clear() removes actions only: the legacy separators, the hidden title widget
+        # and the "Select Action" sub-menu above stayed in the menu as empty lines and a stray
+        # entry. Show a fresh menu; the legacy one (never shown) keeps the objects it owns alive.
+        self._legacy_stat_menu = self.StatMenu
+        self.StatMenu = RoundMenu(parent=self)
         self.StatMenu.addActions([
             Action(FIF.SETTING, 'Settings', triggered=self._show_controlPanel),
+        ])
+        if settings.petname == 'Draconia':
+            # Typed chat (any mode), the Voice switch (self-hosted relay or a voice pack) and climbing.
+            self.StatMenu.addActions([
+                Action(FIF.CHAT, 'Talk to Draconia', triggered=self._open_mia_chat),
+            ])
+            if self._conv_mode() == 'relay' or self._conv_has_voice_pack():
+                # D2.1: the same switch governs relay voice and the optional voice pack.
+                from DyberPet.brain_client import relay_voice_enabled
+                self.relay_voice_toggle = Action(FIF.VOLUME, 'Voice')
+                self.relay_voice_toggle.setCheckable(True)
+                self.relay_voice_toggle.setChecked(relay_voice_enabled(self._mia_brain_path()))
+                self.relay_voice_toggle.triggered.connect(self._toggle_relay_voice)
+                self.StatMenu.addActions([self.relay_voice_toggle])
+            self.StatMenu.addActions([self.mia_climb_toggle])
+        self.StatMenu.addActions([
             Action(FIF.POWER_BUTTON, 'Quit', triggered=self.quit),
         ])
 
@@ -1264,8 +1294,13 @@ class PetWidget(QWidget):
         if old_reactions is not None:
             old_reactions.stop()
         self._draconia_reactions = None
-        pic_dict = _load_all_pic(pet_name)
-        self.pet_conf = PetConfig.init_config(self.curr_pet_name, pic_dict) #settings.size_factor)
+        # M3: frames are decoded per action on demand, at the display size (DyberPet/frames.py);
+        # loading the role no longer decodes every frame of every clip.
+        self.frame_store = pet_frames.FrameStore(os.path.join(basedir, 'res/role/{}/action'.format(pet_name)),
+                                                 scale=settings.tunable_scale, dpr=self.devicePixelRatioF())
+        self.pet_conf = PetConfig.init_config(self.curr_pet_name, self.frame_store) #settings.size_factor)
+        self._life_sync_frames()
+        self._life_add_climb_down()
         if pet_name == 'Draconia':
             from DyberPet.draconia_reactions import install_broom, make_qt_reactions
             install_broom(self.pet_conf)
@@ -1314,24 +1349,42 @@ class PetWidget(QWidget):
         from DyberPet.mia_mood import MoodEngine
         self.mia_mood = MoodEngine.load(self._mia_mood_path())
         self._mia_mood_dominant_seen = self.mia_mood.dominant
-        self._mia_mood_table = load_mood_table(self._mia_brain_path())
+        # D2.2: a profile copied before a clip existed (mirror, quill) gets the bundled mood
+        # entries for the poses it lacks; its own entries win.
+        from DyberPet import char_profile
+        from DyberPet.mia_director import merge_mood_tables
+        self._mia_mood_table = merge_mood_tables(
+            load_mood_table(self._mia_brain_path()),
+            load_mood_table(char_profile.brain_path(Path(basedir) / 'data', pet_name)))
         # perfil: pool de idle propio del personaje activo (contrato
         # MiniDraconia parte B punto 7); vacio para Mia/Kitty/ChrisKitty.
         self._mia_own_idle_poses = load_own_idle_poses(self._mia_brain_path())
+        # M3.2: the role's own idle pool (her clips: tea, reading, spells...), built into
+        # res/role/<pet>/pet_conf.json and authoritative: it does not depend on a profile file
+        # (older profiles carry own_idle_poses on another scale, which would starve clips).
+        from DyberPet.mia_director import load_role_idle_poses
+        self._mia_idle_pool = load_role_idle_poses(
+            os.path.join(basedir, 'res/role/{}/pet_conf.json'.format(pet_name)))
         self._mia_director_profile_options = self._mia_profile_director_options()
         self.mia_director = MiaDirector(
             get_available_poses=self._mia_available_poses,
             play_action=self._mia_play_pose,
             # Mia: ni duerme ni cambia de pose mientras trepa (contrato trepar-paredes).
-            is_busy=lambda: settings.draging == 1 or getattr(getattr(self, "mia_micro_ticker", None), "is_climbing", False) or (
+            # M3: ni mientras dice una frase (habla de verdad, talk_controller.py).
+            is_busy=lambda: settings.draging == 1 or self._life_holds_animation() or (
                 bool(self._mia_director_profile_options) and bool(getattr(self.workers.get('Interaction'), 'interact', None))),
             weights=director_cfg["weights"],
             sleep_after_s=director_cfg["sleep_after_s"],
             mood_table=self._mia_mood_table,
             get_dominant_mood=lambda: self.mia_mood.dominant,
-            on_absence_return=lambda absence_s: self._mia_note_mood_event("zero_returns", absence_s=absence_s),
+            on_absence_return=self._mia_on_absence_return,
             on_mood_tick=self._mia_mood_tick,
             own_idle_poses=self._mia_own_idle_poses,
+            idle_pool=self._mia_idle_pool,
+            # D2.1: one timestamped talk-log line per director decision (never chat text).
+            on_log=lambda msg: self._mia_log('director', msg),
+            # D2.3: a random walk goes the way she has room for a whole walk (wall-aware).
+            walk_room=self._life_walk_room,
             **self._mia_director_profile_options,
         )
         self.mia_director.start()
@@ -1360,10 +1413,32 @@ class PetWidget(QWidget):
             allow_fall=lambda: bool(settings.set_fall),
             start_fall=self._mia_start_climb_fall,
             on_climb_top=lambda: self._mia_note_mood_event("climb_top"),
+            # M3: climb at the sprite's measured speed, hands on the wall, frozen while hanging.
+            get_climb_speed=self._life_climb_speed,
+            on_climb_start=self._life_snap_to_wall,
+            hold_pose=self._life_hold_climb_pose,
+            handle_talk=False,
+            # M3.1: no blink or wall decision replaces the talk clip mid-line.
+            is_talking=lambda: bool(getattr(getattr(self, 'talk_controller', None), 'active', False)),
         )
+        # M3: she visibly talks for every line (talk_controller.py), driven by the same micro timer.
+        from DyberPet.talk_controller import TalkController
+        # M3.2: talk and the closed-mouth pause loop seamlessly in the engine (_life_talk_play).
+        # M3.3: emotion clips play complete (clip_s) and a line waits for the clip playing when it
+        # arrives (body_busy) instead of cutting it.
+        self.talk_controller = TalkController(play_pose=self._life_talk_play, stop_pose=self._life_talk_stop,
+                                  on_release=self._life_release_line,
+                                  clip_s=self._life_clip_s, body_busy=self._life_body_busy)
         self.mia_micro_timer = QTimer(self)
+        # M3.2: which wall she touches, for the random animation thread (it never reads the widget).
+        self.mia_micro_timer.timeout.connect(self._life_publish_wall)
         self.mia_micro_timer.timeout.connect(self.mia_micro_ticker.tick)
         self.mia_micro_timer.start(150)
+        # M3.3: the talk controller ticks every 40 ms (half a 12 fps frame): talk stops as soon as
+        # the voice ends, and the line's poses start as soon as a finishing clip is over.
+        self.talk_timer = QTimer(self)
+        self.talk_timer.timeout.connect(self._life_talk_tick)
+        self.talk_timer.start(40)
 
         # Mia: charla espontánea con el modelo local cada 1.5–4 min (User: "no habla, solo saluda").
         self._mia_chatter_cfg = director_cfg.get("chatter", {}) if isinstance(director_cfg, dict) else {}
@@ -1377,16 +1452,27 @@ class PetWidget(QWidget):
         # onnxruntime no estan instalados o el modelo no esta en disco,
         # MiaVoice.speak() es un no-op silencioso.
         from DyberPet.mia_voice import MiaVoice, KokoroEngine
-        _kokoro_dir = Path(settings.BASEDIR or '.') / 'res' / 'voice' / 'kokoro'
-        self._mia_voice_engine = KokoroEngine(
-            model_path=_kokoro_dir / 'kokoro-v1.0.onnx',
-            voices_path=_kokoro_dir / 'voices-v1.0.bin',
-        )
+        if pet_name == 'Draconia':
+            # Her lines come from the active conversation mode (DyberPet/pet_conversation.py):
+            # self-hosted relay (voiced by the relay), own AI (text) or offline lines (text). Only
+            # the relay produces a voice; without it this engine never synthesises anything.
+            from DyberPet.brain_client import RelayVoiceEngine
+            self._mia_voice_engine = RelayVoiceEngine()
+        else:
+            _kokoro_dir = Path(settings.BASEDIR or '.') / 'res' / 'voice' / 'kokoro'
+            self._mia_voice_engine = KokoroEngine(
+                model_path=_kokoro_dir / 'kokoro-v1.0.onnx',
+                voices_path=_kokoro_dir / 'voices-v1.0.bin',
+            )
         self.mia_voice = MiaVoice(
             engine=self._mia_voice_engine,
             tmp_dir=Path(settings.CONFIGDIR) / 'data' / 'tmp',
         )
         self.mia_voice._log_cb = self._mia_log  # Mia: bitácora de voz (suena / falla)
+        # M3: she talks for as long as the WAV plays (M3.1: and closes her mouth in its pauses).
+        self.mia_voice.on_started = self._life_voice_started
+        self.mia_voice.on_failed = self.talk_controller.voice_failed
+        self._conv_setup()
 
         self._set_menu(self.pets)
         self._set_Statusmenu()
@@ -1474,9 +1560,9 @@ class PetWidget(QWidget):
         settings.previous_img = settings.current_img
         settings.current_img = self.pet_conf.default.images[0] #list(pic_dict.values())[0]
         settings.previous_anchor = [0, 0] #settings.current_anchor
-        settings.current_anchor = [int(i*settings.tunable_scale) for i in self.pet_conf.default.anchor]
+        settings.current_anchor = scaled_anchor(self.pet_conf.default.anchor)
         self.set_img()
-        self.border = self.pet_conf.width/2
+        self.border = self._life_frame_size()[0] / 2
 
         
         # 初始位置
@@ -1522,7 +1608,8 @@ class PetWidget(QWidget):
             return
         if self.tray is None:
             self.tray = SystemTray(self.StatMenu, self) #QSystemTrayIcon(self)
-            self.tray.setIcon(QIcon(os.path.join(basedir, 'res/icons/icon.png')))
+            from DyberPet.app_icon import app_icon
+            self.tray.setIcon(app_icon(basedir))      # D2.1: the app icon, not the inherited one
             self.tray.show()
         else:
             self.tray.setMenu(self.StatMenu)
@@ -1531,9 +1618,9 @@ class PetWidget(QWidget):
     def reset_size(self, setImg=True):
         #self.setFixedSize((max(self.pet_hp.width()+statbar_h,self.pet_conf.width)+self.margin_value)*max(1.0,settings.tunable_scale),
         #                  (self.margin_value+4*statbar_h+self.pet_conf.height)*max(1.0, settings.tunable_scale))
-        self.setFixedSize( int(max(self.tomato_time.width()+statbar_h,self.pet_conf.width*settings.tunable_scale)),
-                           int(2*statbar_h+self.pet_conf.height*settings.tunable_scale)
-                         )
+        self._life_sync_frames()
+        # M3.1: the window is the shown frame (frames.shown_size / settings.pet_display_scale).
+        self.setFixedSize(*self._life_window_size(self.tomato_time.width(), statbar_h))
 
         #self.label.setFixedWidth(self.width())
 
@@ -1548,7 +1635,7 @@ class PetWidget(QWidget):
             y = self.pos().y() + settings.current_anchor[1]
         # make sure that for all stand png, png bottom is the ground
         #self.floor_pos = work_height-self.height()
-        self.floor_pos = self.current_screen.topLeft().y() + work_height - self.height()
+        self.floor_pos = self._life_floor_y()
         self.move(x,y)
         self.move_sig.emit(self.pos().x()+self.width()//2, self.pos().y()+self.height())
 
@@ -1566,23 +1653,30 @@ class PetWidget(QWidget):
             self.move(self.pos().x()-settings.previous_anchor[0]+settings.current_anchor[0],
                       self.pos().y()-settings.previous_anchor[1]+settings.current_anchor[1])
 
-        width_tmp = int(settings.current_img.width()*settings.tunable_scale)
-        height_tmp = int(settings.current_img.height()*settings.tunable_scale)
-
-        # HighDPI-compatible scaling solution
-        # self.label.setScaledContents(True)
-        self.label.setFixedSize(width_tmp, height_tmp)
+        # M3: follow the screen's devicePixelRatio (moving to another monitor) and Pet Scale.
+        # M3.1: when the shown size changes, the window follows around her feet.
+        if self._life_sync_frames():
+            self._life_fit_window(self.tomato_time.width(), statbar_h)
+        img_to_show = settings.current_img
         # Mia: mirar al cursor (comportamiento 5) - espejo horizontal del
         # frame default cuando el cursor esta cerca y el pet no esta
         # caminando (should_flip_to_cursor ya decide cuando aplica).
-        img_to_show = settings.current_img
         # Mia: nunca espejar acciones con dirección propia (caminar, trepar, asomarse, seguir cursor):
         # el espejo pegado producía moonwalk (dibujo hacia un lado, desplazamiento hacia el otro).
         from DyberPet.mia_director import should_mirror_frame
-        if should_mirror_frame(getattr(self, "_mia_cursor_flip", False),
-                               getattr(settings, "anim_act", None), getattr(settings, "current_act", None)):
-            img_to_show = img_to_show.transformed(QTransform().scale(-1, 1))
-        self.label.setPixmap(img_to_show) #QPixmap.fromImage(settings.current_img))
+        mirror = should_mirror_frame(getattr(self, "_mia_cursor_flip", False),
+                                     getattr(settings, "anim_act", None), getattr(settings, "current_act", None))
+        if isinstance(img_to_show, QImage):
+            # M3: a frame from the FrameStore, already at physical size with its DPR: shown 1:1.
+            img_to_show = pet_frames.present(self.label, img_to_show, mirror,
+                                             store=getattr(self, 'frame_store', None))
+        else:
+            self.label.setScaledContents(True)
+            shown_w, shown_h = pet_frames.shown_size(img_to_show, settings.pet_display_scale)
+            self.label.setFixedSize(int(shown_w), int(shown_h))
+            if mirror:
+                img_to_show = img_to_show.transformed(QTransform().scale(-1, 1))
+            self.label.setPixmap(img_to_show)
         # previous scaling soluton
         #self.label.resize(width_tmp, height_tmp)
         #self.label.setPixmap(QPixmap.fromImage(settings.current_img.scaled(width_tmp, height_tmp,
@@ -1602,13 +1696,11 @@ class PetWidget(QWidget):
         self.setup_bubbleText.emit(bubble_dict, self.pos().x()+self.width()//2, self.pos().y()+self.height())
 
     def _mia_log(self, kind: str, text: str) -> None:
-        """Bitácora local de lo que Mia pide y dice (data/mia_talk.log), para verificar."""
-        try:
-            import datetime
-            with open(Path(settings.CONFIGDIR) / 'data' / 'mia_talk.log', 'a', encoding='utf-8') as fh:
-                fh.write("%s %s %s\n" % (datetime.datetime.now().strftime("%H:%M:%S"), kind, text))
-        except OSError:
-            pass
+        """Bitácora local de lo que Mia pide y dice (data/mia_talk.log), para verificar.
+        D2.1: one timestamped line per entry; past TALK_LOG_MAX_BYTES the log moves to
+        mia_talk.log.1 (one old copy kept), so director lines can never fill the disk."""
+        from DyberPet.mia_director import append_talk_log
+        append_talk_log(Path(settings.CONFIGDIR) / 'data' / 'mia_talk.log', kind, text)
 
     def _on_mia_brain_unavailable(self) -> None:
         """C3 revisión 2: si Ollama no responde, el saludo y los toques usan su globo fijo;
@@ -1618,7 +1710,12 @@ class PetWidget(QWidget):
         if text:
             self._emit_mia_bubble(text)
 
-    def _mia_ask(self, prompt: str, fallback: Optional[str] = None) -> bool:
+    def _mia_ask(self, prompt: str, fallback: Optional[str] = None,
+                 brain_event: Optional[str] = None, doing: Optional[str] = None) -> bool:
+        if brain_event and getattr(self, '_conv_brain', None) is not None:
+            # Draconia: a stored line answers the event (D2.1: events never call a brain).
+            self._conv_event(brain_event, doing=doing)
+            return True
         self._mia_fallback_text = fallback
         # Mia: contrato-voz-en.md punto 2 -- con la voz activada se fuerza
         # el idioma a ingles (system_prompt_for_language ya cae al default
@@ -1658,9 +1755,17 @@ class PetWidget(QWidget):
             inter = getattr(self.workers.get('Interaction'), 'interact', None)
             act_name = getattr(self.workers.get('Interaction'), 'act_name', None)
             asleep = (act_name == 'sleep') or getattr(self.mia_director, "is_asleep", False)
-            if may_chatter(settings.onfloor, settings.draging, chat_open,
-                           getattr(self, "_mia_chat_bubble_visible", False), asleep):
-                pose = act_name if inter in ('actlist', 'customized') else None
+            line_in_progress = getattr(self, "_mia_chat_bubble_visible", False) \
+                or bool(getattr(getattr(self, "talk_controller", None), "active", False))
+            if may_chatter(settings.onfloor, settings.draging, chat_open, line_in_progress, asleep):
+                # M3.2: the clip she is playing now (start_interact turns 'actlist' into
+                # 'animat', so the old check never saw a pose), or the random animation's.
+                if inter in ('actlist', 'animat', 'customized', 'anim_acc'):
+                    pose = act_name
+                elif inter is None:
+                    pose = getattr(getattr(settings, 'anim_act', None), 'act_name', None)
+                else:
+                    pose = None
                 prompt = choose_chatter_prompt(self.mia_director.rng, datetime.datetime.now(), pose=pose)
                 # Mia: animo (contrato mia-mood punto 5) -- si el globo lleva
                 # >12s libre, el prompt lleva emocion/affection/eventos para
@@ -1670,7 +1775,8 @@ class PetWidget(QWidget):
                     mood_cfg = getattr(self, "mia_mood", None)
                     if mood_cfg is not None:
                         prompt = mood_cfg.mood_context_prompt() + " " + prompt
-                queued = self._mia_ask(prompt)
+                from DyberPet.mia_director import pose_description
+                queued = self._mia_ask(prompt, brain_event='chatter', doing=pose_description(pose))
                 self._mia_log("pide" if queued else "ocupado", prompt)
             else:
                 self._mia_log("calla", "not available")
@@ -1679,12 +1785,40 @@ class PetWidget(QWidget):
         finally:
             self._mia_schedule_chatter()
 
-    def _emit_mia_bubble(self, text: str) -> None:
+    def _emit_mia_bubble(self, text: str, voice: Optional[bool] = None,
+                         wav: Optional[str] = None) -> None:
         """Emite un globo mia_chat ya con wrap_text + bubble_duration_s
         aplicados (contrato-chat.txt punto 4 / M1 del informe del revisor:
-        antes ambas funciones se importaban pero nunca se usaban aqui)."""
+        antes ambas funciones se importaban pero nunca se usaban aqui).
+
+        Draconia: a typed-chat reply from the self-hosted relay is read by the relay voice
+        (`voice=True`); a stored line plays its recorded voice-pack WAV (`wav`, D2.1). Both only
+        with the menu's Voice switch on and MINIDRACONIA_MUTE unset; pack audio also stays
+        silent with Settings' Mute (volume 0). She visibly talks for every line (pet_life.py)."""
+        director = getattr(self, 'mia_director', None)
+        if director is not None and hasattr(director, 'note_activity'):
+            director.note_activity()     # D2.1: no random nap within 3 minutes of a line
         metrics = QFontMetrics(self.font())
+        # bubble_dict["timeout"] is in seconds (bubble_duration_s).
         bubble_dict = build_mia_chat_bubble(text, metrics.horizontalAdvance)
+        from DyberPet.mia_voice import load_voice_config
+        voice_cfg = load_voice_config(self._mia_brain_path())
+        if settings.petname == 'Draconia':
+            from DyberPet.brain_client import relay_voice_enabled
+            allowed = relay_voice_enabled(self._mia_brain_path()) and os.environ.get('MINIDRACONIA_MUTE') != '1'
+            relay_voice = bool(voice) and allowed and self._conv_mode() == 'relay'
+            pack_voice = bool(wav) and not voice and allowed and float(getattr(settings, 'volume', 1.0) or 0.0) > 0.0
+            voice_cfg["enabled"] = relay_voice or pack_voice
+            voice_cfg["volume"] = voice_cfg.get("volume", 0.8)
+            # M3/M3.1: she visibly talks; a voiced line waits (thinking) for its voice.
+            self._life_say_line(text, bubble_dict, voice_cfg, wav=wav if pack_voice else None)
+            return
+        self._mia_show_bubble(bubble_dict)
+        self.mia_voice.speak(text, cfg=voice_cfg)
+        if voice_cfg.get("enabled"):
+            self._mia_log("voz", "pide Emma")
+
+    def _mia_show_bubble(self, bubble_dict: dict) -> None:
         self.bubble_manager.register_bubble.emit(bubble_dict)
         # Mia: mientras el globo mia_chat esta en pantalla, el microticker
         # alterna 'talk'/'default' (comportamiento 9, B2 del informe revisor).
@@ -1693,20 +1827,10 @@ class PetWidget(QWidget):
         # quedo libre, para saber si lleva >12s sin hablar.
         self._mia_bubble_freed_at = time.time() + bubble_dict["timeout"]
         QTimer.singleShot(int(bubble_dict["timeout"] * 1000), self._mia_clear_chat_bubble_flag)
-        # Mia: voz en ingles (contrato-voz-en.md punto 1). Config se relee
-        # en cada frase; si esta apagada, MiaVoice.speak() es un no-op.
-        from DyberPet.mia_voice import load_voice_config
-        voice_cfg = load_voice_config(self._mia_brain_path())
-        if settings.petname != 'Draconia':
-            self.mia_voice.speak(text, cfg=voice_cfg)
-        if voice_cfg.get("enabled"):
-            self._mia_log("voz", "pide Emma")
 
     def _draconia_bubble(self, text):
-        # Local bubble only: bypass _emit_mia_bubble and its TTS.
-        metrics = QFontMetrics(self.font())
-        bubble = build_mia_chat_bubble(text, metrics.horizontalAdvance)
-        self.bubble_manager.register_bubble.emit(bubble)
+        # A reaction-manifest line without a voice: shown like every other line (she talks).
+        self._emit_mia_bubble(text, voice=False)
 
     def _draconia_react(self, event):
         if settings.petname != 'Draconia':
@@ -1725,19 +1849,8 @@ class PetWidget(QWidget):
         pose = controller.react(event, getattr(self.mia_mood, 'dominant', 'content'),
                                 self._mia_available_poses(), **kwargs)
         if pose:
-            self._mia_play_pose(pose)
-
-    def _s1_event(self, event):
-        from DyberPet.brain import scripted_event
-        line = scripted_event(event)
-        if line:
-            controller = getattr(self, '_draconia_reactions', None)
-            now = time.monotonic()
-            if controller is not None:
-                if now - controller.last_time < controller.cooldown or controller.is_playing():
-                    return
-                controller.last_time = now
-            self._draconia_bubble(line)
+            # M3.3: a touch reaction interrupts at once (even a line); its clip then finishes.
+            self._mia_play_pose(pose, from_touch=event in ('head', 'cheek', 'body'))
 
     def _mia_clear_chat_bubble_flag(self) -> None:
         self._mia_chat_bubble_visible = False
@@ -1764,31 +1877,59 @@ class PetWidget(QWidget):
         cfg = json.loads(path.read_text(encoding='utf-8'))
         return {'combos': combos, 'tick_range_s': cfg.get('director_tick_s', [8, 20])}
 
-    def _mia_play_pose(self, pose_name: str) -> None:
+    def _mia_play_pose(self, pose_name: str, loop: bool = False, from_talk: bool = False,
+                       from_touch: bool = False) -> None:
         """Dispara una pose/accion por nombre si el motor la reconoce como
         accion random (act_data) o personalizada; si no la reconoce, no
         rompe nada (el director ya resolvio el fallback antes de llamar).
 
         B1 (informe revisor): nunca debe reventar ni entrar en bucle de
-        error; cualquier excepcion se registra (log) y se descarta."""
+        error; cualquier excepcion se registra (log) y se descarta.
+
+        M3.2: `loop` plays the clip as a seamless loop (talk while she speaks); while a line is
+        active only the talk controller (`from_talk`) and drag/fall/climb may change her clip.
+        A walk toward the wall she touches turns around; the walk in progress ends here.
+
+        M3.3: climb clips loop for the whole climb and climb_down starts on the held frame;
+        a touch reaction (`from_touch`) interrupts a line at once."""
         try:
             # Mia: nunca pisar arrastre/caída del motor (User: "se queda flotando").
             from DyberPet.mia_director import pose_allowed
             _inter = getattr(self.workers.get('Interaction'), 'interact', None) if hasattr(self, 'workers') else None
             if not pose_allowed(pose_name, _inter, settings.onfloor, settings.draging):
                 return
+            if not self._life_pose_allowed_while_talking(pose_name, from_talk, from_touch):
+                return
+            pose_name = self._life_turn_from_wall(pose_name)
+            acts_config = settings.act_data.allAct_params.get(settings.petname, {})
             if pose_name == "follow_cursor":
+                interact = 'followTarget'
+            elif pose_name in acts_config:
+                interact = 'actlist'
+            elif pose_name in getattr(self.pet_conf, "act_name", []):
+                # M3: runtime-only actions (climb_down) are not in the user's action list.
+                interact = 'animat'
+            elif pose_name in getattr(self.pet_conf, "act_dict", {}):
+                interact = 'customized'
+            else:
+                return          # e.g. 'blink' (the role has no such clip): nothing changes
+            # M3.2: a clip really starts: the walk in progress (if any) ends here.
+            self._life_walk_end()
+            if pose_name.endswith("_walk") or pose_name == "follow_cursor":
+                self._mia_log("walk", "start %s x=%d" % (pose_name, self.pos().x()))
+            if interact == 'followTarget':
                 self._mia_start_follow_cursor()
                 return
-            acts_config = settings.act_data.allAct_params.get(settings.petname, {})
-            if pose_name in acts_config:
-                self.workers['Animation'].pause()
-                self.workers['Interaction'].start_interact('actlist', pose_name)
-            elif pose_name in getattr(self.pet_conf, "act_dict", {}):
-                self.workers['Animation'].pause()
-                self.workers['Interaction'].start_interact('customized', pose_name)
+            self.workers['Animation'].pause()
+            loop = loop or self._life_loops_clip(pose_name)
+            start_frame = self._life_clip_start_frame(pose_name)
+            if start_frame:
+                self.workers['Interaction'].start_interact(interact, pose_name, loop=loop,
+                                                           start_frame=start_frame)
             else:
-                return
+                self.workers['Interaction'].start_interact(interact, pose_name, loop=loop)
+            if from_touch:
+                self._life_touch_reaction()
             # Mia: platica por clip (contrato mia-mood punto 5) -- frase
             # instantanea de data/mia_lines.json al arrancar una pose "con
             # significado"; nunca pisa el globo de _mia_ask (zonas de toque
@@ -1857,7 +1998,9 @@ class PetWidget(QWidget):
         try:
             if getattr(self, "MouseTracker", None) is not None:
                 self.MouseTracker._listener.stop()
-            self.workers['Interaction'].stop_interact()
+            # M3.2: the follow timer must not stop whatever plays later (a talk loop, a pose).
+            if getattr(self.workers.get('Interaction'), 'interact', None) == 'followTarget':
+                self.workers['Interaction'].stop_interact()
         except Exception:
             logging.getLogger(__name__).exception("_mia_stop_follow_cursor fallo (silenciado)")
 
@@ -1885,14 +2028,21 @@ class PetWidget(QWidget):
 
         return {
             "state": state,
+            # The clip the interaction plays now (a peek ends only if she is still peeking).
+            "act_name": getattr(interaction, 'act_name', None),
             "pet_center_x": pet_center_x,
             "cursor_x": QCursor.pos().x(),
             "dragging": settings.draging == 1,
+            # D2.2: no yawn when she falls asleep while falling (she is not on the floor).
+            "on_floor": settings.onfloor == 1,
             "at_edge": at_edge,
             "chat_bubble_visible": getattr(self, "_mia_chat_bubble_visible", False),
             "chat_bubble_text": "",
             # Mia: gancho C2 (sueno de verdad) y C4 (peek con clip dedicado si existe).
-            "sleeping": bool(getattr(self.mia_director, "is_asleep", False)),
+            "sleeping": bool(getattr(self.mia_director, "is_asleep", False))
+                        and not bool(getattr(getattr(self, "talk_controller", None), "active", False)),
+            # M3: a walk heading into the wall she already touches (re-decide turn/peek/climb).
+            "walking_toward": life_walking_toward(state),
             "available_poses": self._mia_available_poses(),
             "pos_y": float(self.pos().y()),
             "floor_y": float(self.pos().y()),
@@ -2052,6 +2202,24 @@ class PetWidget(QWidget):
         if not checked:
             self.mia_voice.shutdown()
 
+    def _toggle_relay_voice(self, checked: bool) -> None:
+        """Menu -> Voice (self-hosted relay mode): writes `relay_voice` in the profile's brain file."""
+        path = self._mia_brain_path()
+        try:
+            data = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+        except (OSError, json.JSONDecodeError):
+            data = {}
+        if not isinstance(data, dict):
+            data = {}
+        data["relay_voice"] = bool(checked)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        except OSError:
+            pass
+        if not checked:
+            self.mia_voice.shutdown()
+
     def _mia_start_climb_fall(self) -> None:
         """Mia: se suelta de la pared y cae con la física de soltarla con el ratón
         (mismo camino que mouseReleaseEvent con set_fall), con un empujoncito
@@ -2078,9 +2246,12 @@ class PetWidget(QWidget):
             data = {}
         if not isinstance(data, dict):
             data = {}
-        climb_cfg = load_climb_config(path)
-        climb_cfg["enabled"] = bool(checked)
-        data["climb"] = climb_cfg
+        # M3.1: write only the toggle (and keys the user set by hand), so later default
+        # changes (speed, hold time) still reach this profile.
+        user_climb = dict(data["climb"]) if isinstance(data.get("climb"), dict) else {}
+        user_climb["enabled"] = bool(checked)
+        data["climb"] = user_climb
+        climb_cfg = load_climb_config(data)
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -2154,7 +2325,7 @@ class PetWidget(QWidget):
         saludo fijo de siempre."""
         if settings.petname == 'Draconia':
             self._mia_play_pose('greet')
-            self._s1_event('greet')
+            self._conv_event('greet')
             return
         self._mia_play_pose('greet')
         from DyberPet.mia_status import load_reports_config, mia_greeting_flow
@@ -2175,7 +2346,7 @@ class PetWidget(QWidget):
         tiempo garantizado de responder dentro del limite)."""
         if settings.petname == 'Draconia':
             self._mia_play_pose('bye')
-            self._s1_event('bye')
+            self._conv_send_bye()
             return
         self._mia_play_pose('bye')
         self._emit_mia_bubble(self._mia_fallback_line("bye"))
@@ -2183,8 +2354,6 @@ class PetWidget(QWidget):
     # --- Mia: chat escrito (comportamiento 12, docs/contrato-chat.txt) ------
 
     def _open_mia_chat(self) -> None:
-        if settings.petname == 'Draconia':
-            return  # Scripted interactions only; no free-text UI.
         # Mia: abrir el chat cuenta como interaccion (comportamiento 4/12).
         self.mia_director.note_interaction()
         if self.mia_chat_box is not None and self.mia_chat_box.isVisible():
@@ -2192,7 +2361,9 @@ class PetWidget(QWidget):
             return
         self.mia_chat_box = ChatBox(self)
         self.mia_chat_box.message_sent.connect(self._on_mia_chat_sent)
-        self.mia_chat_box.setFixedWidth(220)
+        # Wide enough for the whole hint (a fixed 220 px box clipped it).
+        hint = self.mia_chat_box.fontMetrics().horizontalAdvance(self.mia_chat_box.placeholderText())
+        self.mia_chat_box.setFixedWidth(max(220, hint + 34))
         x = self.pos().x() + self.width() // 2 - self.mia_chat_box.width() // 2
         y = self.pos().y() - 40
         self.mia_chat_box.move(x, y)
@@ -2200,6 +2371,13 @@ class PetWidget(QWidget):
         self.mia_chat_box.setFocus()
 
     def _on_mia_chat_sent(self, text: str) -> None:
+        director = getattr(self, 'mia_director', None)
+        if director is not None and hasattr(director, 'note_activity'):
+            director.note_activity()     # D2.1: no random nap within 3 minutes of a typed message
+        if getattr(self, '_conv_brain', None) is not None:
+            # Draconia: typed chat goes to the active mode (relay, own key) or offline lines.
+            self._conv_chat(text)
+            return
         self._mia_play_pose('think')
         chat_cfg = load_chat_config(self._mia_brain_path())
         brain_cfg = self.local_brain.cfg
@@ -2464,16 +2642,17 @@ class PetWidget(QWidget):
                     from DyberPet.mia_director import resolve_pose, MOOD_TOUCH_PROMPTS, MOOD_TOUCH_LINES
                     available = self._mia_available_poses() | set(
                         settings.act_data.allAct_params.get(settings.petname, {}).keys())
-                    self._mia_play_pose(resolve_pose(mood_pose, available))
+                    self._mia_play_pose(resolve_pose(mood_pose, available), from_touch=True)
                     self._mia_ask(MOOD_TOUCH_PROMPTS.get(mood_pose, zone_prompt),
                                   fallback=self._mia_mood_touch_fallback(mood_pose))
                 elif zone != "head" and zone_pose in getattr(self.pet_conf, "act_dict", {}).keys() | \
                         set(settings.act_data.allAct_params.get(settings.petname, {}).keys()):
-                    self._mia_play_pose(zone_pose)
+                    self._mia_play_pose(zone_pose, from_touch=True)
                     self._mia_ask(zone_prompt, fallback=self._mia_fallback_line("touch"))
                 else:
                     self.workers['Animation'].pause()
                     self.workers['Interaction'].start_interact('patpat')
+                    self._life_touch_reaction()
                     # Mia habla si Ollama está vivo; si no, el globo aleatorio de siempre.
                     self._mia_ask(zone_prompt, fallback=self._mia_fallback_line("pat"))
 
@@ -2535,6 +2714,13 @@ class PetWidget(QWidget):
             while deadline.elapsed() < 1500:
                 QApplication.processEvents()
                 time.sleep(0.05)
+            if getattr(self, '_conv_brain', None) is not None:
+                self.mia_voice.shutdown()
+                if self._conv_finish_bye():
+                    # The remote goodbye was too slow: give the offline one a moment on screen.
+                    while deadline.elapsed() < 2500:
+                        QApplication.processEvents()
+                        time.sleep(0.05)
         except Exception:
             pass
         settings.pet_data.save_data()
@@ -2575,7 +2761,7 @@ class PetWidget(QWidget):
         main_pos = [int(self.pos().x() + self.width()//2), int(self.pos().y() + self.height() - self.label.height())]
 
         if object_name == 'mouse':
-            self.send_positions.emit(main_pos, self.mouse_pos)
+            self.send_positions.emit(main_pos, self._life_cursor_target())
 
     def update_mouse_position(self, x, y):
         self.mouse_pos = [x, y]
@@ -2767,6 +2953,19 @@ class PetWidget(QWidget):
         self.workers['Animation'].sig_move_anim.connect(self._move_customized)
         self.workers['Animation'].sig_repaint_anim.connect(self.repaint)
         self.workers['Animation'].acc_regist.connect(self.register_accessory)
+        # M3.2: walks end (and are logged) when their clip ends; a random walk never starts
+        # toward the wall she touches; random idle clips come from her own varied pool.
+        # (a bound method of the window: queued to the UI thread, after the walk's queued moves)
+        self.workers['Animation'].sig_walk_done.connect(self._life_anim_walk_done)
+        # M3.3: the random animation finished its clip for a line: the line's poses start now.
+        self.workers['Animation'].sig_clip_released.connect(self._life_talk_tick)
+        self._life_publish_wall()
+        self.workers['Animation'].wall_side = lambda: getattr(self, '_life_wall', None)
+        # D2.3: its random walks follow the director's rule: the side with room for a whole walk.
+        self.workers['Animation'].walk_room = lambda: getattr(self, '_life_room', None)
+        director = getattr(self, 'mia_director', None)
+        if director is not None and getattr(self, '_mia_idle_pool', None):
+            self.workers['Animation'].idle_picker = director.pick_idle_pose
 
         # Start the thread
         self.threads['Animation'].start()
@@ -2836,8 +3035,14 @@ class PetWidget(QWidget):
         #print(act_list)
         #direction, frame_move = str(act_list[0]), float(act_list[1])
         pos = self.pos()
-        new_x = pos.x() + plus_x
-        new_y = pos.y() + plus_y
+        # M3: per-frame steps are fractional at small scales (10.75 px); keep the remainder so
+        # walks travel the full distance instead of losing it to int truncation.
+        rem_x, rem_y = getattr(self, '_move_remainder', (0.0, 0.0))
+        step_x, step_y = plus_x + rem_x, plus_y + rem_y
+        int_x, int_y = int(step_x), int(step_y)
+        self._move_remainder = (step_x - int_x, step_y - int_y)
+        new_x = pos.x() + int_x
+        new_y = pos.y() + int_y
 
         # 正在下落的情况，可以切换屏幕
         if settings.onfloor == 0:
@@ -2847,9 +3052,7 @@ class PetWidget(QWidget):
                 new_x, new_y = self.limit_in_screen(new_x, new_y)
             # 在空中
             else:
-                anim_area = QRect(self.pos() + QPoint(self.width()//2-self.label.width()//2, 
-                                                      self.height()-self.label.height()), 
-                                  QSize(self.label.width(), self.label.height()))
+                anim_area = self._life_sprite_rect()
                 intersected = self.current_screen.intersected(anim_area)
                 area = intersected.width() * intersected.height() / self.label.width() / self.label.height()
                 if area > 0.5:
@@ -2881,10 +3084,17 @@ class PetWidget(QWidget):
                 self.switch_screen(_nb)
                 new_x = entry_center_x(_from, self.current_screen) - self.width() // 2
                 new_y = self.floor_pos + settings.current_anchor[1]
-                self._mia_log("pantalla", "cruza a %s" % _nb.name())
+                self._mia_log("screen", "cross to %s" % _nb.name())
             new_x, new_y = self.limit_in_screen(new_x, new_y, on_action=True)
+            if int_x != 0 and plus_y == 0:
+                # M3.2: a walk step; the walk ends after 4 steps the screen edge clamped to zero.
+                moved = int(new_x) - pos.x()
+                self.move(int(new_x), int(new_y))
+                self._life_publish_wall()
+                self._life_track_walk(int_x, moved)
+                return
 
-        self.move(new_x, new_y)
+        self.move(int(new_x), int(new_y))
 
 
     def switch_screen(self, screen):
@@ -2893,7 +3103,7 @@ class PetWidget(QWidget):
         self.screen_geo = screen.availableGeometry() #screenGeometry()
         self.screen_width = self.screen_geo.width()
         self.screen_height = self.screen_geo.height()
-        self.floor_pos = self.current_screen.topLeft().y() + self.screen_height -self.height()
+        self.floor_pos = self._life_floor_y()
 
 
     def limit_in_screen(self, new_x, new_y, on_action=False):
@@ -2956,6 +3166,16 @@ class PetWidget(QWidget):
 
 
     def resume_animation(self):
+        # M3.2: the interaction finished; a walk it was playing ends here (logged once).
+        self._life_walk_end('inter')
+        # M3.3: a line waiting for this clip (or the end of its emotion clip) goes on now,
+        # not at the next tick.
+        if self._life_line_active():
+            self._life_talk_tick()
+        # M3: while she climbs or says a line the random animation stays paused (it would
+        # start a walk between two climb/talk clips); they resume it when they finish.
+        if self._life_holds_animation():
+            return
         self.workers['Animation'].resume()
     
     def _mightEventTrigger(self):

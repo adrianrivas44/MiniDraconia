@@ -13,6 +13,11 @@ _policy_spec.loader.exec_module(asset_policy)
 # The inherited GPL LICENSE is still bundled below; source provenance stays in the repository.
 datas = [(str(root / name), name) for name in ('data',)]
 _violations = []
+# data/ ships whole: a relay seed, a key file or another product's input there is an error.
+for path in sorted((root/'data').rglob('*')):
+    _rule = asset_policy.violation(path.relative_to(root).as_posix()) if path.is_file() else None
+    if _rule:
+        _violations.append('%s %s' % (_rule, path.relative_to(root).as_posix()))
 for path in sorted((root/'res').rglob('*')):
     if not path.is_file():
         continue
@@ -30,6 +35,22 @@ if _violations:
 datas += [(str(root/'LICENSE'), '.'), (str(root/'DyberPet/brain/alma-draconia-v6-compact-en.md'), 'DyberPet/brain')]
 # Single version file of the repository, bundled at the resource root (read by DyberPet.version).
 datas += [(str(root.parent/'VERSION'), '.')]
+# Her character soul: the own-key mode's system prompt is SOUL.en.md + data/draconia_desktop_prompt_en.txt
+# (DyberPet/brain_client.system_prompt reads it from <resource root>/docs/identity/).
+datas += [(str(root.parent/'docs'/'identity'/'SOUL.en.md'), 'docs/identity')]
+# D2.1: the exe's icon and Windows version info. The icon is the same res/icons/app.ico the
+# windows and the tray use (DyberPet/app_icon.py); swapping it means replacing app.png/app.ico.
+APP_ICON = root/'res'/'icons'/'app.ico'
+if not APP_ICON.is_file():
+    raise RuntimeError('the application icon is missing: ' + str(APP_ICON))
+_version_spec = importlib.util.spec_from_file_location('minidraconia_version_info', str(Path(SPECPATH) / 'version_info.py'))
+version_info = importlib.util.module_from_spec(_version_spec)
+_version_spec.loader.exec_module(version_info)
+_version_dir = globals().get('workpath')
+if not _version_dir:
+    import tempfile
+    _version_dir = tempfile.mkdtemp(prefix='minidraconia-version-')
+VERSION_FILE = version_info.write_version_file((root.parent/'VERSION').read_text(encoding='utf-8').strip(), _version_dir)
 binaries = []
 hiddenimports = ['pynput.mouse._win32', 'pynput.keyboard._win32']
 hiddenimports += [m for m in collect_submodules('DyberPet') if m != 'DyberPet.brain.local']
@@ -79,6 +100,8 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=str(APP_ICON),
+    version=str(VERSION_FILE),
 )
 coll = COLLECT(
     exe,

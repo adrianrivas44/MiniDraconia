@@ -55,6 +55,14 @@ The builder writes the candidate ZIP, checksum and build receipt under `dist/`, 
 
 Reports and profiles must be fresh, absolute and outside the installation; the smoke report is also outside its profile. The builder supplies these paths automatically. Runtime checks use a path with spaces and do not inherit the developer's PYTHONPATH.
 
+## Sprites, walking and talking modes
+
+- `scripts/measure_sprite_motion.py` measures how far her planted foot travels per frame (`frame_move` in `full-engine/res/role/Draconia/act_conf.json`, the loop mean) and where each step ends (`step_ends`). Re-run it after changing the walk sprites: `QT_QPA_PLATFORM=offscreen python scripts/measure_sprite_motion.py`.
+- Her idle pool and weights are `idle_poses` in `full-engine/res/role/Draconia/pet_conf.json`.
+- Conversation modes live in `full-engine/DyberPet/brain_client.py` (offline / own AI / self-hosted relay) and `pet_conversation.py`; tests use fake transports and never contact the network. No endpoint or model is preset ([connect your own AI](CONNECT-YOUR-AI.md)).
+- A self-hosted relay (advanced) is connected by placing `minidraconia_relay.json` (`{"base_url", "token"}`) beside your own built executable **after** `package_scripted.py` has produced and verified the public ZIP; the protocol is in [SELF-HOSTED-RELAY.md](SELF-HOSTED-RELAY.md). The same goes for an optional `voice_pack/` ([VOICE-PACK.md](VOICE-PACK.md)). Never put either in the repository, in `full-engine/` or in a public ZIP: `.gitignore`, the asset policy, the builder and `scripts/scan_release.py` reject them.
+- `scripts/scan_release.py` flags only generic private paths. To also block your own machine names, folders or account names, list them (one literal per line) in an untracked `.release-private-markers` file at the repository root (git-ignored) or pass `--private-markers FILE`; a hit is a blocking finding and the marker itself is never printed.
+
 ## Layout
 
 - `full-engine/run_DyberPet.py`: inherited application and real normal startup.

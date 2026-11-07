@@ -1,6 +1,6 @@
-# Release gate — 1.0.0-rc.1
+# Release gates — 1.0.0-rc.1 and 1.0.0-rc.2
 
-This is an experimental community prerelease authorized by the maintainer. **Public availability does not complete unchecked items.** Technical checks below refer to frozen candidate F, which completes the Python/OpenSSL notice inventory after D; final community documentation was updated separately. This checklist is a transparent status record, not legal clearance or a stable-release certificate.
+This is an experimental community prerelease authorized by the maintainer. **Public availability does not complete unchecked items.** The first list is 1.0.0-rc.1's: its technical checks refer to frozen candidate F, which completes the Python/OpenSSL notice inventory after D; final community documentation was updated separately. This checklist is a transparent status record, not legal clearance or a stable-release certificate.
 
 - [ ] Source snapshot and first-publication scope frozen; maintainer reviewed exact public contents.
 - [x] Dependencies documented and installed in a new isolated Windows virtual environment; pip check passed. Not a fresh-machine Windows installation.
@@ -18,3 +18,18 @@ This is an experimental community prerelease authorized by the maintainer. **Pub
 - [x] Public push/release explicitly authorized; repository, tag and prerelease read back. All three Release assets were then fully downloaded without authentication and their byte counts/SHA256 matched. Publication/download verification does not complete the unchecked human or rights items above.
 
 The Windows ZIP belongs in Release assets, not in Git history. Source, tests and build instructions belong in the repository. Do not upload private intake archives, internal operation reports or a developer's environment.
+
+## 1.0.0-rc.2 — publication gate
+
+An item is checked only with evidence attached to the publication record. Technical results from the writer's Linux run are inputs to review, not acceptance.
+
+- [ ] Linux test suite green apart from the known environment reds, reviewed independently of the writer's report.
+- [ ] Windows test run on a real Windows machine, including the DPAPI key round-trip test (skipped on Linux).
+- [ ] Frozen normal startup smoke and scripted selftest of the exact extracted ZIP; release scan of tree and ZIP clean; no relay seed, key file or voice pack in the ZIP.
+- [ ] Public tree names nothing of a private setup (private-word check and `scripts/scan_release.py`, with the maintainer's own `.release-private-markers`, both clean on the exact tagged commit).
+- [ ] No AI provider preset: a new profile shows empty base URL and model and stays offline; *Test connection* and *Save* refuse empty fields.
+- [ ] Your-own-AI mode exercised against a real hosted endpoint with a test key (text only, daily limit, *Forget key*) and against a real local server without a key.
+- [ ] Self-hosted relay protocol in `docs/SELF-HOSTED-RELAY.md` exercised against a real relay (health, chat, voice); the public ZIP has no seed.
+- [ ] Human review on a real display: walks travel without visible skating and look where they go, broom climb, talking, sit pose, the new mirror/quill/yawn clips, the icon, crisp frames at 150 %.
+- [ ] Character, art (including the three new clips and the icon), voice and identity-document provenance/rights resolved. Public availability does not resolve third-party rights.
+- [ ] Maintainer reviewed the exact public contents and authorized the push, tag and prerelease; Release assets read back and their SHA256 matched after an unauthenticated download.

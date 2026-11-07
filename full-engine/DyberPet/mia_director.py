@@ -15,8 +15,11 @@ upstream salvo los ganchos de pocas lineas documentados en DyberPet.py.
 from __future__ import annotations
 
 import json
+import math
 import random
+import threading
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable, Optional, Sequence
@@ -166,11 +169,14 @@ def resolve_pose(requested: str, available: Iterable[str], fallback_chain=("happ
 IDLE_POSES = ("yawn", "sit", "read", "stretch", "think")
 
 DEFAULT_WEIGHTS = {
-    "idle": 0.45,
+    "idle": 0.55,
     "walk": 0.25,
-    "follow_cursor": 0.15,
+    "follow_cursor": 0.10,
     "sleep": 0.05,
 }
+
+# M3.2: an idle pose never repeats any of the last IDLE_NO_REPEAT idle poses.
+IDLE_NO_REPEAT = 3
 
 
 def choose_behavior(weights: dict, rng: random.Random) -> str:
@@ -226,7 +232,7 @@ def choose_weighted_pose(rng: random.Random, candidates: Sequence[str],
 
 
 # perfil: pool de idle propio del personaje activo (data/<x>_brain.json
-# ["own_idle_poses"], p. ej. Draconia: spell/tea/hairflip/slowclap/read/
+# ["own_idle_poses"], p. ej. spell/tea/hairflip/slowclap/read/
 # think/stretch/sit). Vacio (default) == comportamiento de siempre.
 def load_own_idle_poses(brain_path) -> dict:
     """Lee `own_idle_poses` (pose -> peso) de un *_brain.json. Si falta el
@@ -316,8 +322,115 @@ def choose_profile_idle_pose(rng: random.Random, available: Iterable[str],
     return choose_idle_pose(rng, pool)
 
 
-def choose_walk_direction(rng: random.Random) -> str:
-    return rng.choice(("left", "right"))
+# ---------------------------------------------------------------------------
+# M3.2: idle pool built into the role (res/role/<pet>/pet_conf.json["idle_poses"]),
+# so it does not depend on a profile file the user never had.
+# ---------------------------------------------------------------------------
+
+def load_role_idle_poses(pet_conf_path) -> dict:
+    """`idle_poses` (pose -> weight) of a role's pet_conf.json; {} when absent or invalid."""
+    try:
+        data = json.loads(Path(pet_conf_path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    table = data.get("idle_poses") if isinstance(data, dict) else None
+    if not isinstance(table, dict):
+        return {}
+    out = {}
+    for pose, weight in table.items():
+        try:
+            weight = float(weight)
+        except (TypeError, ValueError):
+            continue
+        if weight > 0:
+            out[str(pose)] = weight
+    return out
+
+
+def choose_fresh_idle_pose(rng: random.Random, pool: dict, recent: Sequence[str] = (),
+                           available: Optional[Iterable[str]] = None,
+                           dominant: Optional[str] = None,
+                           mood_table: Optional[dict] = None) -> Optional[str]:
+    """A weighted pick from `pool` (pose -> weight) that is none of the `recent` poses.
+
+    Only poses the role really has (`available`) are candidates, so a missing clip never
+    falls back to standing. The mood multiplies the weights (never to zero: every pose keeps a
+    small chance). None when the pool has no playable pose."""
+    poses = [p for p in pool if available is None or p in set(available)]
+    if not poses:
+        return None
+    fresh = [p for p in poses if p not in set(recent)] or poses
+    weights = {p: float(pool[p]) for p in fresh}
+    if mood_table and dominant:
+        moody = mood_weighted_choice(weights, dominant, mood_table)
+        weights = {p: max(moody.get(p, 0.0), 0.1 * weights[p]) for p in fresh}
+    return choose_behavior(weights, rng)
+
+
+BEHAVIORS = ("idle", "walk", "follow_cursor", "sleep")
+
+
+def fold_pose_weights(weights: dict) -> dict:
+    """With a role idle pool every idle clip goes through `pick_idle_pose` (no repeat of the last
+    IDLE_NO_REPEAT): weights an older profile gives to single poses (spell, tea...) are added to
+    `idle` instead of being chosen directly."""
+    out = {k: float(v) for k, v in weights.items() if k in BEHAVIORS}
+    extra = sum(float(v) for k, v in weights.items() if k not in BEHAVIORS and float(v) > 0)
+    if extra:
+        out["idle"] = out.get("idle", 0.0) + extra
+    return out
+
+
+def walk_room(x: int, width: int, screen_left: int, screen_width: int) -> dict:
+    """D2.3: logical px she can walk toward each side of her screen before her window's side
+    reaches that edge (where the micro ticker's edge reaction, turn/peek/climb, takes over)."""
+    left = int(x) - int(screen_left)
+    right = int(screen_left) + int(screen_width) - (int(x) + int(width))
+    return {"left": max(0, left), "right": max(0, right)}
+
+
+def walk_distance(acts, scale: float) -> float:
+    """D2.3: logical px one full walk travels: frames x frame_move (sprite px) x display scale,
+    summed over the walking acts of `acts` (an act list may end with her stand)."""
+    total = 0.0
+    for act in acts or ():
+        if getattr(act, "need_move", False) and getattr(act, "direction", None) in ("left", "right"):
+            frames = len(getattr(act, "images", None) or ()) * int(getattr(act, "act_num", 1) or 1)
+            total += frames * abs(float(getattr(act, "frame_move", 0) or 0)) * float(scale)
+    return total
+
+
+# D2.3: when no side has room for a whole walk (her 515 px window at 100 % leaves 509 px of a
+# 1024 px screen, less than two 330 px walks), she still walks toward the roomier side if it holds
+# at least this fraction of a walk; below that (a tiny screen) she does not walk.
+MIN_WALK_FRACTION = 0.5
+
+
+def walkable_sides(room: dict, need: dict) -> tuple:
+    """Sides a random walk may take: those with room for one full walk; if there is none, the
+    roomier side when it holds MIN_WALK_FRACTION of a walk; else none."""
+    room = {side: float(room.get(side, 0) or 0) for side in ("left", "right")}
+    need = {side: float(need.get(side, 0) or 0) for side in ("left", "right")}
+    full = tuple(side for side in ("left", "right") if room[side] >= need[side] - 1e-6)
+    if full:
+        return full
+    best = max(("left", "right"), key=lambda side: room[side])
+    return (best,) if room[best] >= MIN_WALK_FRACTION * need[best] - 1e-6 else ()
+
+
+def choose_walk_direction(rng: random.Random, room: Optional[dict] = None,
+                          need: Optional[dict] = None) -> Optional[str]:
+    """Direction of a random walk. D2.3: with her `room` toward each side and the `need` of one
+    full walk each way, a side with less room than a walk is not chosen while the other has room;
+    both sides with room keep the coin flip; with no room on either side, the roomier side if it
+    holds MIN_WALK_FRACTION of a walk, else None (she does not walk). Without geometry: the coin
+    flip of before."""
+    if room is None or need is None:
+        return rng.choice(("left", "right"))
+    sides = walkable_sides(room, need)
+    if len(sides) == 2:
+        return rng.choice(sides)
+    return sides[0] if sides else None
 
 
 def choose_walk_duration(rng: random.Random, lo: float = 2.0, hi: float = 6.0) -> float:
@@ -507,6 +620,27 @@ BLINK_DURATION_S = 0.15
 TALK_ALTERNATE_PERIOD_S = 0.18
 KICK_ALTERNATE_PERIOD_S = 0.25
 
+# D2.2: falling asleep (a random nap or away sleep) is yawn -> doze -> sleep; the yawn plays once,
+# complete. A stage the role has no clip for is skipped.
+YAWN_POSE = "yawn"
+
+
+def first_sleep_stage(available: Iterable[str], dragging: bool = False, on_floor: bool = True) -> str:
+    """The clip she plays when she falls asleep: 'yawn' if the role has it and she is on the
+    floor and not dragged; else 'doze' if the role has it; else 'sleep'."""
+    available = set(available or ())
+    if YAWN_POSE in available and not dragging and on_floor:
+        return YAWN_POSE
+    return "doze" if "doze" in available else "sleep"
+
+
+def next_sleep_stage(stage: Optional[str], available: Iterable[str]) -> str:
+    """The clip after `stage` once it is over: yawn -> doze (if the role has it) -> sleep -> sleep."""
+    available = set(available or ())
+    if stage == YAWN_POSE and "doze" in available:
+        return "doze"
+    return "sleep"
+
 
 class MiaMicroTicker:
     """Microcomportamientos que se revisan en cada tick corto (parpadeo,
@@ -529,7 +663,12 @@ class MiaMicroTicker:
                  on_climb_log: Optional[Callable[[str], None]] = None,
                  allow_fall: Optional[Callable[[], bool]] = None,
                  start_fall: Optional[Callable[[], None]] = None,
-                 on_climb_top: Optional[Callable[[], None]] = None):
+                 on_climb_top: Optional[Callable[[], None]] = None,
+                 get_climb_speed: Optional[Callable[[], float]] = None,
+                 on_climb_start: Optional[Callable[[str], None]] = None,
+                 hold_pose: Optional[Callable[[], None]] = None,
+                 handle_talk: bool = True,
+                 is_talking: Optional[Callable[[], bool]] = None):
         self._get_context = get_context
         self._play_action = play_action
         self._apply_cursor_flip = apply_cursor_flip
@@ -547,6 +686,16 @@ class MiaMicroTicker:
         self._start_fall = start_fall
         # Mia: animo (contrato mia-mood punto 2) -- +joy al llegar arriba.
         self._on_climb_top = on_climb_top
+        # M3: speed matched to the sprite (holds do not slide), wall snap, freeze while hanging.
+        self._get_climb_speed = get_climb_speed
+        self._on_climb_start = on_climb_start
+        self._hold_pose = hold_pose
+        # M3: talking is driven by talk_controller.TalkController; the one-shot talk here is off.
+        self._handle_talk = handle_talk
+        # M3.1: while she says a line (talk_controller.TalkController.active) neither a blink nor a wall
+        # decision (turn/peek/climb, end of a peek) may replace her talk clip.
+        self._is_talking = is_talking
+        self._edge_retry_at: Optional[float] = None
 
         self._next_blink_at: Optional[float] = None
         self._last_drag_pose: Optional[str] = None
@@ -563,6 +712,15 @@ class MiaMicroTicker:
         sepan que Mia esta trepando: ni duerme ni cambia de pose mientras
         tanto (comportamiento 5 del contrato trepar-paredes)."""
         return self._climb is not None and self._climb.active
+
+    @property
+    def is_talking(self) -> bool:
+        if self._is_talking is None:
+            return False
+        try:
+            return bool(self._is_talking())
+        except Exception:
+            return False
 
     def tick(self) -> None:
         ctx = self._get_context()
@@ -594,14 +752,19 @@ class MiaMicroTicker:
             return
         self._sleep_stage = None
 
-        if not climbing:
+        talking = self.is_talking
+        if not climbing and not talking:
             self._tick_edge(ctx, now)
 
         if self._peek_until is None and not climbing:
             self._tick_cursor_flip(ctx)
 
-        self._tick_blink(ctx, now)
-        self._tick_talk(ctx, now)
+        if talking:
+            self._next_blink_at = None   # M3.1: a blink would cut the talk clip mid-line
+        elif not climbing:
+            self._tick_blink(ctx, now)   # M3: no other clip may replace the climb
+        if self._handle_talk:
+            self._tick_talk(ctx, now)
 
     def _log(self, msg: str) -> None:
         if self._on_climb_log:
@@ -615,9 +778,19 @@ class MiaMicroTicker:
         available = ctx.get("available_poses") or set()
         pose, mirror = climb_pose_for_side(side, available)
         self._apply_cursor_flip(bool(mirror))
+        if self._on_climb_start is not None:
+            self._on_climb_start(side)
         self._play_action(pose)
+        self._climb_pose = pose
         self._peek_until = None
-        speed = float(self._climb_cfg.get("speed", DEFAULT_CLIMB_CFG["speed"]))
+        speed = None
+        if self._get_climb_speed is not None:
+            try:
+                speed = float(self._get_climb_speed())
+            except Exception:
+                speed = None
+        if not speed or speed <= 0:
+            speed = float(self._climb_cfg.get("speed", DEFAULT_CLIMB_CFG["speed"]))
         self._climb = ClimbSession.start(
             side=side,
             start_y=ctx.get("pos_y", 0.0),
@@ -644,10 +817,15 @@ class MiaMicroTicker:
             # Mia: animo (contrato mia-mood punto 2) -- llego arriba.
             if self._on_climb_top is not None:
                 self._on_climb_top()
+            # M3: hanging still -> freeze on the current frame (a running clip would slide).
+            if self._hold_pose is not None:
+                self._hold_pose()
         if event in ("ceiling", "released_fall"):
             if not self._allow_fall():
                 self._climb.phase = "down"
                 self._log("baja")
+                # M3.3: the climb clip loops in the engine; going down plays climb_down.
+                self._play_climb_clip(ctx, down=True)
                 return True
             self._cancel_climb()
             self._log("suelta")
@@ -657,27 +835,46 @@ class MiaMicroTicker:
             return False
         if event == "walk_down_start":
             self._log("baja")
+            self._play_climb_clip(ctx, down=True)
             return True
         if event == "reached_floor":
             self._cancel_climb()
             self._play_action("default")
             return False
+        # M3: keep the climb clip running while she moves on the wall (the clip is 73 frames;
+        # a climb lasts longer). M3.3: the pet plays climb clips as engine loops, so this is
+        # only a fallback for a clip that was stopped from outside.
+        if self._climb is not None and self._climb.phase in ("up", "down") \
+                and ctx.get("state", "default") == "default":
+            self._play_climb_clip(ctx, down=self._climb.phase == "down")
         return True
+
+    def _play_climb_clip(self, ctx: dict, down: bool) -> None:
+        available = ctx.get("available_poses") or set()
+        pose = getattr(self, "_climb_pose", "climb")
+        if down and CLIMB_DOWN_POSE in available and pose == "climb":
+            pose = CLIMB_DOWN_POSE
+        self._play_action(pose)
 
     def _tick_sleep(self, ctx: dict) -> None:
         """C2 informe revisor 2: mientras sleeping=True, 'sleep' se queda
         en bucle (se re-dispara cuando el cuadro anterior termina, es decir
         cuando `state` vuelve a 'default'). La primera vez pide 'doze' si
         el role la trae (nota de Mia 2026-10-12: bostezo y se queda dormida
-        de pie, una vez); si no existe, va directo a 'sleep'."""
+        de pie, una vez); si no existe, va directo a 'sleep'.
+
+        D2.2: when the role has a 'yawn' clip she first yawns once, complete (the next stage
+        starts only when the clip is over, `state` back to 'default'), then doze -> sleep as
+        before. No yawn when sleep starts while she is dragged or falling: then doze -> sleep."""
         available = ctx.get("available_poses") or set()
         if self._sleep_stage is None:
-            self._sleep_stage = "doze" if "doze" in available else "sleep"
+            self._sleep_stage = first_sleep_stage(available, bool(ctx.get("dragging")),
+                                                  bool(ctx.get("on_floor", True)))
             self._play_action(self._sleep_stage)
             return
         if ctx.get("state", "default") == "default":
-            self._sleep_stage = "sleep"
-            self._play_action("sleep")
+            self._sleep_stage = next_sleep_stage(self._sleep_stage, available)
+            self._play_action(self._sleep_stage)
 
     def _tick_blink(self, ctx: dict, now: float) -> None:
         if ctx.get("state") != "default":
@@ -730,6 +927,14 @@ class MiaMicroTicker:
         """
         at_edge = ctx.get("at_edge")
         new_touch = bool(at_edge) and at_edge != self._last_edge_seen
+        # M3: walks now really travel, so a later walk can head into the same wall she is
+        # already at; decide again (turn/peek/climb) instead of walking in place against it.
+        if (not new_touch and at_edge and ctx.get("walking_toward") == at_edge
+                and self._peek_until is None
+                and (self._edge_retry_at is None or now >= self._edge_retry_at)):
+            new_touch = True
+        if new_touch:
+            self._edge_retry_at = now + 1.0
         self._last_edge_seen = at_edge
 
         if new_touch:
@@ -746,12 +951,16 @@ class MiaMicroTicker:
                 self._apply_cursor_flip(bool(mirror))
                 self._play_action(pose)
                 self._peek_until = now + peek_duration(self.rng)
+                self._peek_pose = pose
             return
 
         if self._peek_until is not None and now >= self._peek_until:
             self._peek_until = None
             self._apply_cursor_flip(False)
-            self._play_action("default")
+            # D2: back to her stand only if she is still peeking; a clip that started meanwhile
+            # (a walk, a touch reaction, a line) is never cut by the old peek timer.
+            if ctx.get("act_name", getattr(self, "_peek_pose", None)) == getattr(self, "_peek_pose", None):
+                self._play_action("default")
 
     def _tick_talk(self, ctx: dict, now: float) -> None:
         # Mia: 'talk' ya es un clip de video completo (boca + gesto, ~4 s, vuelve a la pose).
@@ -784,12 +993,116 @@ class DirectorState:
     active_interact: Optional[str] = None
     on_floor: bool = True
     sleeping: bool = False
+    last_activity_ts: float = float('-inf')   # D2.1: last line or typed message
     sleep_kind: Optional[str] = None     # Mia: "nap" (siesta al azar, despierta sola) | "away" (User lejos del PC)
     wake_at: float = 0.0
     combo_pending: Optional[str] = None  # perfil: secuencia de caracter en cola (t_108e7d40 punto 3)
 
 
 NAP_RANGE_S = (45.0, 120.0)
+
+# D2.1 (owner: "se quedó dormida a los segundos"): random naps are rare and never early.
+NAP_WARMUP_S = 600.0              # no random nap in the first 10 minutes after start
+NAP_QUIET_S = 180.0               # nor within 3 minutes of an interaction, typed message or line
+NAP_MIN_MEAN_INTERVAL_S = 600.0   # whatever the tick range: at most ~1 random nap per 10 min
+
+
+def cap_nap_weight(weights: dict, elapsed_s: float,
+                   min_mean_interval_s: float = NAP_MIN_MEAN_INTERVAL_S) -> dict:
+    """`weights` with 'sleep' lowered so one behaviour roll naps with a share of at most
+    `elapsed_s / min_mean_interval_s`, where `elapsed_s` is the time since the previous roll.
+
+    Summed over rolls, the expected number of random naps is then at most
+    (time elapsed) / min_mean_interval_s, however short the role's `director_tick_s` is.
+    The director restarts that clock when she falls asleep and when she wakes, so the bound
+    holds over her awake time. A weight that is already rarer is kept. A configuration whose
+    only weight is 'sleep' gets no random naps (away sleep is separate)."""
+    out = dict(weights or {})
+    try:
+        sleep = max(0.0, float(out.get('sleep', 0.0) or 0.0))
+        others = sum(max(0.0, float(v)) for k, v in out.items() if k != 'sleep')
+    except (TypeError, ValueError):
+        return out
+    if sleep <= 0.0:
+        return out
+    if min_mean_interval_s <= 0:
+        return out
+    max_share = max(0.0, float(elapsed_s)) / float(min_mean_interval_s)
+    if max_share >= 1.0:
+        return out
+    if others <= 0.0:
+        out['sleep'] = 0.0
+        return out
+    limit = max_share * others / (1.0 - max_share)
+    if sleep > limit:
+        out['sleep'] = limit
+    return out
+
+
+def expected_nap_interval_s(weights: dict, tick_range_s: Sequence[float],
+                            min_mean_interval_s: float = NAP_MIN_MEAN_INTERVAL_S) -> float:
+    """Mean seconds between random naps while she is awake, idle and past the warm-up and
+    quiet rules, when every director tick rolls a behaviour (busy ticks only make it longer).
+    Uses the mean tick; the per-roll cap of `cap_nap_weight` included."""
+    lo, hi = float(tick_range_s[0]), float(tick_range_s[1])
+    tick = (lo + hi) / 2.0
+    capped = cap_nap_weight(weights, tick, min_mean_interval_s)
+    total = sum(max(0.0, float(v)) for v in capped.values())
+    share = max(0.0, float(capped.get('sleep', 0.0))) / total if total > 0 else 0.0
+    return tick / share if share > 0 else float('inf')
+
+
+TALK_LOG_MAX_BYTES = 2 * 1024 * 1024
+
+
+def append_talk_log(path, kind: str, text: str, max_bytes: int = TALK_LOG_MAX_BYTES,
+                    now: Optional[float] = None) -> None:
+    """One `HH:MM:SS kind text` line in the pet's local talk log. Past `max_bytes` the log is
+    moved to `<name>.1` (one old copy) first. One stat and one append per line; never raises."""
+    import datetime
+    try:
+        path = Path(path)
+        try:
+            if path.stat().st_size >= max_bytes:
+                path.replace(path.with_name(path.name + '.1'))
+        except OSError:
+            pass
+        stamp = datetime.datetime.fromtimestamp(time.time() if now is None else now).strftime('%H:%M:%S')
+        with open(path, 'a', encoding='utf-8') as fh:
+            fh.write('%s %s %s\n' % (stamp, kind, text))
+    except Exception:
+        pass
+
+
+class RateLimitedLog:
+    """At most `max_lines` per `window_s` reach `sink`; the rest are counted and the next line
+    that gets through says how many were dropped. Cheap: a deque of timestamps."""
+
+    def __init__(self, sink: Callable[[str], None], clock: Callable[[], float],
+                 max_lines: int = 20, window_s: float = 60.0):
+        self._sink = sink
+        self._clock = clock
+        self._max = max(1, int(max_lines))
+        self._window = float(window_s)
+        self._times: deque = deque()
+        self.dropped = 0
+
+    def __call__(self, message: str) -> bool:
+        try:
+            now = self._clock()
+            while self._times and now - self._times[0] >= self._window:
+                self._times.popleft()
+            if len(self._times) >= self._max:
+                self.dropped += 1
+                return False
+            self._times.append(now)
+            if self.dropped:
+                message = '%s (+%d dropped)' % (message, self.dropped)
+                self.dropped = 0
+            self._sink(message)
+            return True
+        except Exception:
+            return False
 
 
 def system_idle_seconds() -> Optional[float]:
@@ -843,16 +1156,33 @@ class MiaDirector(QObject if QTimer is not None else object):
                  on_mood_tick: Optional[Callable[[], None]] = None,
                  own_idle_poses: Optional[dict] = None,
                  combos: Optional[dict] = None,
-                 tick_range_s: Sequence[float] = (8.0, 20.0)):
+                 tick_range_s: Sequence[float] = (8.0, 20.0),
+                 idle_pool: Optional[dict] = None,
+                 on_log: Optional[Callable[[str], None]] = None,
+                 nap_warmup_s: float = NAP_WARMUP_S,
+                 nap_quiet_s: float = NAP_QUIET_S,
+                 nap_min_mean_interval_s: float = NAP_MIN_MEAN_INTERVAL_S,
+                 walk_room: Optional[Callable[[], Optional[tuple]]] = None):
         if QTimer is not None:
             super().__init__(parent)
+        # D2.3: (room, need) from where she stands now, for the direction of a random walk
+        # (choose_walk_direction); None, or a failing provider, keeps the coin flip.
+        self._walk_room = walk_room
         self._get_available_poses = get_available_poses
         self._play_action = play_action
         self._is_busy = is_busy
         self.weights = dict(weights or DEFAULT_WEIGHTS)
         # perfil: pool de idle propio del personaje activo (contrato
-        # MiniDraconia parte B punto 7); vacio == comportamiento de siempre.
+        # perfil por personaje, punto 7); vacio == comportamiento de siempre.
         self._own_idle_poses = dict(own_idle_poses or {})
+        # M3.2: the role's own idle pool (pose -> weight). When given it is the whole idle pool,
+        # shared with the engine's random animation (pick_idle_pose), never repeating any of
+        # the last IDLE_NO_REPEAT idle poses.
+        self._idle_pool = dict(idle_pool or {})
+        self._recent_idle = deque(maxlen=IDLE_NO_REPEAT)
+        self._idle_lock = threading.Lock()
+        if self._idle_pool:
+            self.weights = fold_pose_weights(self.weights)
         # perfil: secuencias de caracter (t_108e7d40 punto 3), generico;
         # vacio (Mia/Kitty/ChrisKitty hoy) == sin combos, comportamiento de siempre.
         self._combos = dict(combos or {})
@@ -880,6 +1210,14 @@ class MiaDirector(QObject if QTimer is not None else object):
         # Mia: reaccion de toque segun animo (bloqueante B1).
         self._touch_reactor = TouchMoodReactor()
         self.state = DirectorState(last_interaction_ts=now_fn())
+        # D2.1: no early naps. The warm-up counts from construction (the pet's start).
+        self._started_at = self.state.last_interaction_ts
+        self._last_roll_ts = self._started_at
+        self._nap_warmup_s = float(nap_warmup_s)
+        self._nap_quiet_s = float(nap_quiet_s)
+        self._nap_min_mean_interval_s = float(nap_min_mean_interval_s)
+        # D2.1: one talk-log line per decision, rate-limited (never chat text).
+        self._log_sink = RateLimitedLog(on_log, self._now) if on_log is not None else None
         self.timer = None
         if QTimer is not None:
             self.timer = QTimer(self)
@@ -917,6 +1255,22 @@ class MiaDirector(QObject if QTimer is not None else object):
             except Exception:
                 pass
 
+    def note_activity(self):
+        """A line was shown or a message typed (D2.1): no random nap for NAP_QUIET_S. Unlike
+        note_interaction it neither wakes her nor counts as the user coming back."""
+        self.state.last_activity_ts = self._now()
+
+    def nap_allowed(self, now: Optional[float] = None) -> bool:
+        """A random nap may start: past the warm-up and quiet since the last interaction,
+        typed message or line. Away sleep does not ask this."""
+        now = self._now() if now is None else now
+        quiet_since = max(self.state.last_interaction_ts, self.state.last_activity_ts)
+        return now - self._started_at >= self._nap_warmup_s and now - quiet_since >= self._nap_quiet_s
+
+    def _log(self, message: str) -> None:
+        if self._log_sink is not None:
+            self._log_sink(message)
+
     def note_action(self, pose: str):
         """Notifica una pose real externa (p. ej. cambio de animo a bored)."""
         if not self._combos or self._emitting_pose:
@@ -927,6 +1281,7 @@ class MiaDirector(QObject if QTimer is not None else object):
             self._schedule_next()
 
     def _emit_pose(self, pose: str, *, combo=False):
+        self._log('act %s' % pose)
         self._emitting_pose = True
         try:
             self._play_action(pose)
@@ -960,9 +1315,57 @@ class MiaDirector(QObject if QTimer is not None else object):
         llamador sigue con la reaccion de zona de siempre)."""
         return self._touch_reactor.react(self._current_dominant(), zone)
 
+    @property
+    def recent_idle(self) -> list:
+        return list(self._recent_idle)
+
+    def pick_idle_pose(self, available: Optional[Iterable[str]] = None) -> Optional[str]:
+        """Next idle pose from the role's pool, none of the last IDLE_NO_REPEAT ones. Thread-safe:
+        the engine's random animation thread asks here too."""
+        if not self._idle_pool:
+            return None
+        if available is None:
+            try:
+                available = set(self._get_available_poses())
+            except Exception:
+                available = None
+        with self._idle_lock:
+            pose = choose_fresh_idle_pose(self.rng, self._idle_pool, self._recent_idle, available,
+                                          self._current_dominant(), self._mood_table)
+            if pose is not None:
+                self._recent_idle.append(pose)
+            return pose
+
+    def _emit_idle(self, available) -> None:
+        if self._idle_pool:
+            pose = self.pick_idle_pose(available)
+            if pose is not None:
+                self._emit_pose(pose)
+            return
+        # perfil: el pool se amplia con own_idle_poses del personaje
+        # activo (contrato de perfil por personaje, punto 7); vacio ==
+        # exactamente choose_weighted_pose/choose_idle_pose de siempre.
+        dominant = self._current_dominant()
+        pose = choose_profile_idle_pose(
+            self.rng, available, dominant, self._mood_table, self._own_idle_poses)
+        self._emit_pose(resolve_pose(pose, available))
+
+    def _walk_direction(self) -> Optional[str]:
+        """D2.3: a random walk's direction from her real room on her screen (wall-aware)."""
+        geometry = None
+        if self._walk_room is not None:
+            try:
+                geometry = self._walk_room()
+            except Exception:
+                geometry = None
+        room, need = geometry if geometry else (None, None)
+        return choose_walk_direction(self.rng, room, need)
+
     def _wake_up(self):
         self.state.sleeping = False
         self.state.sleep_kind = None
+        self._last_roll_ts = self._now()     # D2.1: time asleep never counts toward the next nap
+        self._log('wake')
         available = self._get_available_poses()
         wake_pose = "wake" if "wake" in available else "yawn"
         self._play_action(resolve_pose(wake_pose, available))
@@ -971,7 +1374,14 @@ class MiaDirector(QObject if QTimer is not None else object):
         # El primer 'doze'/'sleep' lo dispara el MicroTicker (ve sleeping=True en ~150 ms).
         self.state.sleeping = True
         self.state.sleep_kind = kind
-        self.state.wake_at = self._now() + self.rng.uniform(*NAP_RANGE_S) if kind == "nap" else 0.0
+        self._last_roll_ts = self._now()
+        if kind == "nap":
+            seconds = self.rng.uniform(*NAP_RANGE_S)
+            self.state.wake_at = self._now() + seconds
+            self._log('nap %d' % round(seconds))
+        else:
+            self.state.wake_at = 0.0
+            self._log('away sleep')
 
     @property
     def is_asleep(self) -> bool:
@@ -1017,26 +1427,38 @@ class MiaDirector(QObject if QTimer is not None else object):
         if self.state.combo_pending:
             followup = self.state.combo_pending
             self.state.combo_pending = None
-            if followup in available:
+            if followup in available and not (self._idle_pool and followup in self._recent_idle):
+                if self._idle_pool and followup in self._idle_pool:
+                    with self._idle_lock:
+                        self._recent_idle.append(followup)
                 self._emit_pose(followup, combo=True)
                 return
-        action = choose_behavior(self._effective_weights(), self.rng)
+        # D2.1: random naps only past the warm-up and quiet rules, and never more often than
+        # about one per NAP_MIN_MEAN_INTERVAL_S whatever the tick range.
+        elapsed, self._last_roll_ts = now - self._last_roll_ts, now
+        weights = dict(self._effective_weights())
+        if self.nap_allowed(now):
+            weights = cap_nap_weight(weights, elapsed, self._nap_min_mean_interval_s)
+        elif "sleep" in weights:
+            weights["sleep"] = 0.0
+        action = choose_behavior(weights, self.rng)
         if action == "idle":
-            # perfil: el pool se amplia con own_idle_poses del personaje
-            # activo (contrato MiniDraconia parte B punto 7); vacio ==
-            # exactamente choose_weighted_pose/choose_idle_pose de siempre.
-            dominant = self._current_dominant()
-            pose = choose_profile_idle_pose(
-                self.rng, available, dominant, self._mood_table, self._own_idle_poses)
-            self._emit_pose(resolve_pose(pose, available))
+            self._emit_idle(available)
         elif action == "walk":
-            direction = choose_walk_direction(self.rng)
+            direction = self._walk_direction()
+            if direction is None:
+                # D2.3: no room for a walk on either side (a tiny screen): an idle pose instead.
+                self._log('walk none (no room)')
+                self._emit_idle(available)
+                return
             # build_mia_role.py registra el ciclo de caminar como
             # "left_walk"/"right_walk" (pet_conf['random_act'], no
             # "walk_left"/"walk_right"); con el nombre equivocado caminar
             # era un NO-OP real (informe revisor B2).
+            self._log('walk %s' % direction)
             self._play_action(f"{direction}_walk")
         elif action == "follow_cursor":
+            self._log('follow')
             self._play_action("follow_cursor")
         elif action == "sleep":
             # Mia: siesta corta al azar; despierta sola (antes quedaba dormida para siempre).
@@ -1053,7 +1475,13 @@ _POSE_DESC = {
     "think": "you are lost in thought", "stretch": "you just stretched",
     "yawn": "you just yawned", "walk": "you are strolling along the taskbar",
     "sleep": "you are waking up from a nap", "happy": "you are in a good mood",
+    "tea": "you are sipping your tea",
 }
+
+
+def pose_description(pose: Optional[str]) -> Optional[str]:
+    """What she is doing in `pose`, for the chatter context ('tea' -> sipping her tea)."""
+    return _POSE_DESC.get((pose or "").replace("right_", "").replace("left_", ""))
 
 _CHATTER_TOPICS = (
     "Share a short thought about what you are doing right now.",
@@ -1076,7 +1504,7 @@ LINES = {
 
 # perfil: alias para reusar frases propias del perfil activo cuando LINES
 # no tiene una clave 1:1 en *_lines.json (p. ej. "touch"/"pat" generico ->
-# "touch_body"/"patpat", que si existen en draconia_lines.json).
+# "touch_body"/"patpat", que si existen en un <pet>_lines.json propio).
 _FALLBACK_LINE_ALIASES = {"touch": "touch_body", "pat": "patpat"}
 
 
@@ -1085,7 +1513,7 @@ def fallback_line(key: str, lines: Optional[dict] = None) -> str:
 
     Sin `lines` (perfil sin *_lines.json propio: Mia/Kitty/ChrisKitty,
     contrato punto 8) devuelve LINES[key] tal cual, sin cambios. Con
-    `lines` (perfil propio ya cargado, p. ej. Draconia) usa su primera
+    `lines` (perfil propio ya cargado) usa su primera
     frase para `key` o, si no la tiene, para el alias en
     `_FALLBACK_LINE_ALIASES`; solo si ninguna existe cae a LINES[key]
     (ingles) -- contrato punto 7: la respuesta de respaldo nunca debe
@@ -1121,7 +1549,7 @@ def choose_chatter_prompt(rng, now, pose: Optional[str] = None) -> str:
     topic = rng.choice(_CHATTER_TOPICS)
     clock = now.strftime("%I:%M %p").lstrip("0")
     ctx = "It is %s in the %s." % (clock, _part_of_day(now.hour))
-    desc = _POSE_DESC.get((pose or "").replace("right_", "").replace("left_", ""))
+    desc = pose_description(pose)
     if desc:
         ctx += " Right now %s." % desc
     return "%s %s Talk to User directly (use you), one sentence." % (ctx, topic)
@@ -1151,15 +1579,17 @@ def may_chatter(onfloor: int, dragging: int, chat_open: bool,
 # ---------------------------------------------------------------------------
 
 CLIMB_HEIGHT_FRAC = (0.20, 0.85)
-CLIMB_HOLD_RANGE_S = (5.0, 20.0)
+CLIMB_HOLD_RANGE_S = (2.5, 10.0)   # M3.1: half of M3's 5-20 s (the climb felt slow)
 CLIMB_RELEASE_FALL_PROB = 0.6     # 60% suelta y cae, 40% baja trepando
 CLIMB_CEILING_MARGIN_PX = 10      # "y <= top + 10" del contrato
 
+# M3: on by default ("she only stays on the bottom"); the "Climb walls" menu toggle
+# still writes climb.enabled in the user's brain file and that choice wins.
 DEFAULT_CLIMB_CFG = {
-    "enabled": False,
+    "enabled": True,
     "prob": 0.35,
     "speed": 40.0,
-    "hold_s": [5.0, 20.0],
+    "hold_s": [2.5, 10.0],
 }
 
 
@@ -1168,8 +1598,8 @@ def load_climb_config(brain_cfg_or_path) -> dict:
 
     Acepta la ruta del archivo o un dict ya cargado (p. ej. por
     `load_director_config`). Si falta el archivo, no es JSON valido, o no
-    trae la clave "climb", cae a DEFAULT_CLIMB_CFG (climb deshabilitado:
-    nunca trepa salvo que User lo prenda a mano, comportamiento 6).
+    trae la clave "climb", cae a DEFAULT_CLIMB_CFG (M3: habilitado por defecto;
+    el toggle del menu lo apaga y esa eleccion se guarda).
     """
     if isinstance(brain_cfg_or_path, dict):
         data = brain_cfg_or_path
@@ -1219,6 +1649,23 @@ def climb_pose_for_side(side: str, available_poses: Iterable[str]) -> tuple[str,
     if dedicated in available_poses:
         return dedicated, False
     return "climb", side == "left"
+
+
+CLIMB_DOWN_POSE = "climb_down"   # the climb clip played backwards (built by the pet window)
+
+
+def frame_period_s(frame_refresh: float, tick_s: float) -> float:
+    """How long the engine's interaction timer really shows one frame: whole ticks."""
+    if tick_s <= 0:
+        return max(frame_refresh, 1e-3)
+    return max(1, math.ceil(round(frame_refresh / tick_s, 6))) * tick_s
+
+
+def climb_speed_px_s(frame_move: float, display_scale: float, frame_refresh: float, tick_s: float) -> float:
+    """Climb speed (logical px/s) at which the holds do not slide on the wall:
+    `frame_move` sprite px per frame (scripts/measure_sprite_motion.py) at the on-screen
+    scale, once per displayed frame of the climb clip."""
+    return float(frame_move) * float(display_scale) / frame_period_s(frame_refresh, tick_s)
 
 
 @dataclass
@@ -1331,6 +1778,18 @@ def load_mood_table(brain_path) -> dict:
         return {}
     table = data.get("mood") if isinstance(data, dict) else None
     return dict(table) if isinstance(table, dict) else {}
+
+
+def merge_mood_tables(own: Optional[dict], bundled: Optional[dict]) -> dict:
+    """The profile's mood table plus the bundled entries for the poses it does not list.
+
+    D2.2: the profile copies the brain file once, so a profile made before a clip existed (mirror,
+    quill) has no mood entry for it. Every pose the profile does list keeps the profile's entry
+    exactly as it is (the user's edits win); the bundled table only fills the gaps."""
+    out = dict(bundled or {}) if isinstance(bundled, dict) else {}
+    if isinstance(own, dict):
+        out.update(own)
+    return out
 
 
 def mood_weighted_choice(weights: dict, dominant: str, mood_table: dict) -> dict:
@@ -1461,8 +1920,8 @@ def mood_touch_fallback_line(mood_pose: str, lines: Optional[dict] = None) -> st
     "peek"/"bored").
 
     Correccion FAIL t_ea577267 (B2): antes `MOOD_TOUCH_LINES[mood_pose]` se
-    usaba a secas, en ingles fijo, aunque el perfil activo (Draconia) ya
-    traiga su propia frase para esa clave (draconia_lines.json: angry,
+    usaba a secas, en ingles fijo, aunque el perfil activo ya
+    traiga su propia frase para esa clave (<pet>_lines.json: angry,
     shy, bored, peek, pinch). Con `lines` (perfil propio, igual que
     `fallback_line`) se usa esa frase; sin `lines` (Mia/Kitty/ChrisKitty,
     contrato punto 8) cae exactamente a MOOD_TOUCH_LINES de siempre."""

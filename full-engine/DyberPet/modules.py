@@ -19,6 +19,7 @@ from PySide6.QtCore import QObject, QThread, Signal
 
 from DyberPet.utils import *
 from DyberPet.conf import *
+from DyberPet.frames import prefetch_frames
 
 
 import DyberPet.settings as settings
@@ -27,6 +28,214 @@ basedir = settings.BASEDIR
 # system config
 sys_hp_tiers = settings.HP_TIERS #[0,50,80,100] #Line 48, 289
 sys_nonDefault_prob = [1, 0.125, 0.25, 0.5] #Line 50
+
+
+def frame_step(act, direction=None, scale=None):
+    """(dx, dy) logical pixels the window moves for one displayed frame of `act`.
+
+    `frame_move` is in sprite pixels per frame (the ground speed of the planted foot, see
+    scripts/measure_sprite_motion.py); on screen the sprite is drawn at the pet's display
+    scale, so the step is scaled the same way or she skates (M3: "she walks in place")."""
+    direction = direction or getattr(act, 'direction', None)
+    if scale is None:
+        scale = getattr(settings, 'pet_display_scale', 1.0)
+    step = float(getattr(act, 'frame_move', 0) or 0) * float(scale)
+    return {'right': (step, 0.), 'left': (-step, 0.), 'up': (0., -step), 'down': (0., step)}.get(direction, (0., 0.))
+
+
+FOLLOW_STUCK_FRAMES = 4
+# M3.2: any walk (director, follow, the random animation) whose steps the screen edge clamps to
+# zero this many frames in a row ends; she never walks in place against a wall.
+WALK_STUCK_FRAMES = 4
+
+
+def follow_blocked(trail, x):
+    """True when the last FOLLOW_STUCK_FRAMES walk frames left her at the same x (a wall)."""
+    return bool(trail) and len(trail) >= FOLLOW_STUCK_FRAMES and all(v == x for v in trail)
+
+
+def wall_side(x, width, screen_left, screen_width, margin=1):
+    """'left'/'right' when the pet window touches that edge as `PetWidget.limit_in_screen`
+    clamps it (window centre on the screen edge), else None."""
+    centre = int(x) + int(width) // 2
+    if centre <= screen_left + margin:
+        return 'left'
+    if centre >= screen_left + screen_width - margin:
+        return 'right'
+    return None
+
+
+def is_walk(act):
+    """A clip that moves her sideways (walk cycles, also while following the cursor)."""
+    return bool(getattr(act, 'need_move', False)) and getattr(act, 'direction', None) in ('left', 'right')
+
+
+def walk_with_room(act, walk_room, pet_conf, idle_picker=None):
+    """D2.3: the random animation's walk `act` under the director's rule
+    (mia_director.choose_walk_direction). `walk_room()` is the room the pet publishes from the UI
+    thread ({'left': px, 'right': px}); this thread never reads the widget. The walk keeps its
+    direction if one full walk fits that way, else turns to the other side if a walk fits there;
+    with room on neither side it becomes one of her idle clips (`idle_picker`), else her stand."""
+    from DyberPet.mia_director import walk_distance, walkable_sides
+    try:
+        room = walk_room()
+    except Exception:
+        return act
+    if not room:
+        return act
+    other = pet_conf.right if act.direction == 'left' else pet_conf.left
+    other_side = 'right' if act.direction == 'left' else 'left'
+    scale = getattr(settings, 'pet_display_scale', 1.0)
+    need = {act.direction: walk_distance([act], scale),
+            other_side: walk_distance([other], scale) if is_walk(other) else float('inf')}
+    sides = walkable_sides(room, need)
+    if act.direction in sides:
+        return act
+    if sides:
+        return other
+    if idle_picker is not None:
+        try:
+            idle = getattr(pet_conf, 'act_dict', {}).get(idle_picker())
+        except Exception:
+            idle = None
+        if isinstance(idle, Act):
+            return idle
+    return pet_conf.default
+
+
+class WalkTracker:
+    """One walk at a time (M3.2): frames moved, real dx and steps the screen edge clamped to zero.
+
+    `step()` returns True when the last WALK_STUCK_FRAMES steps were all clamped (the walk must
+    end); `end()` returns the diagnostic line once, then forgets the walk."""
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.pose = None
+        self.source = None
+        self.dx = 0
+        self.frames = 0
+        self.clamped = 0
+        self._stuck_run = 0
+
+    @property
+    def active(self):
+        return self.pose is not None
+
+    def begin(self, pose, source):
+        self.reset()
+        self.pose, self.source = pose, source
+
+    def step(self, requested_dx, moved_dx):
+        self.frames += 1
+        self.dx += int(moved_dx)
+        if int(requested_dx) != 0 and int(moved_dx) == 0:
+            self.clamped += 1
+            self._stuck_run += 1
+        else:
+            self._stuck_run = 0
+        return self._stuck_run >= WALK_STUCK_FRAMES
+
+    def end(self):
+        if not self.active:
+            return None
+        line = 'end %s dx=%d frames=%d clamped=%d' % (self.pose, self.dx, self.frames, self.clamped)
+        self.reset()
+        return line
+
+
+# Clips the random pool never swaps for an idle pose (M3.2). D2.2: 'yawn' opens her random
+# Sleep act (yawn -> doze -> sleep); it is never an idle pose of its own.
+NOT_IDLE_CLIPS = ('default', 'yawn', 'doze', 'sleep', 'drag', 'fall', 'onfloor', 'climb', 'climb_down',
+                  'patpat')
+
+
+def due_frame(started_at, now, frame_s, shown=-1):
+    """Index of the frame a clip started at `started_at` (monotonic seconds) must show at `now`
+    (M3.2): the schedule is `started_at + k * frame_s`, so a late tick neither delays nor
+    stretches the frames after it. Never goes back, and never repeats `shown`."""
+    if frame_s <= 0:
+        return shown + 1
+    due = int((now - started_at) / frame_s + 1e-9)
+    return max(due, shown + 1)
+
+
+# M3.3: a line never cuts a clip mid-way. The clip playing when a line arrives goes on to its end
+# if that comes within FINISH_CLIP_S; otherwise it stops at its next natural point (the end of a
+# step, or of a repetition of its images) within FINISH_CLIP_S, and if there is none, at
+# FINISH_CLIP_S. A walk stops at the end of its current step (`step_ends` markers, measured by
+# scripts/measure_sprite_motion.py); a walk without step markers stops at once.
+FINISH_CLIP_S = 2.5
+
+
+def natural_points(act, after, upto):
+    """Frame indexes b, after < b <= upto, at which `act` may stop without cutting a movement: the
+    frame after each step marker (`step_ends`: the last frame of a step, both feet planted) and
+    the end of every repetition of its images. Indexes count on across repetitions."""
+    images = getattr(act, 'images', None)
+    n = len(images) if images is not None else 0
+    if n <= 0 or upto <= after:
+        return []
+    marks = sorted({int(m) + 1 for m in (getattr(act, 'step_ends', None) or ()) if 0 <= int(m) < n} | {n})
+    out = []
+    lap = max(0, int(after) // n)
+    while lap * n < upto:
+        for m in marks:
+            b = lap * n + m
+            if after < b <= upto:
+                out.append(b)
+        lap += 1
+    return out
+
+
+def yield_time(started, now, frame_s, deadline, total=None, points=()):
+    """When a clip that started at `started` (frame k due at started + k * frame_s) lets a line
+    take over (M3.3): its end (`total` frames; None for a looping clip) if that comes by
+    `deadline`, else the first natural point (frame index in `points`) due from `now` to
+    `deadline`, else `deadline`. Never before `now`."""
+    if frame_s <= 0:
+        return now
+    if total is not None:
+        end = started + total * frame_s
+        if end <= deadline + 1e-9:
+            return max(now, end)
+    for b in sorted(points):
+        t = started + b * frame_s
+        if now - 1e-9 <= t <= deadline + 1e-9:
+            return t
+    return max(now, deadline)
+
+
+def is_stand(act, pet_conf):
+    """Her stand clip (the pet's `default`): a line never waits for it, talk starts from it."""
+    default = getattr(pet_conf, 'default', None)
+    return act is not None and default is not None and \
+        getattr(act, 'act_name', None) == getattr(default, 'act_name', object())
+
+
+def yields_at_once(act, pet_conf):
+    """A line takes over at once from her stand and from a walk with no step markers."""
+    return is_stand(act, pet_conf) or (is_walk(act) and not getattr(act, 'step_ends', None))
+
+
+def scaled_anchor(anchor, scale=None):
+    """An action's anchor (sprite pixels) in logical pixels at the pet's on-screen scale
+    (`settings.pet_display_scale`: the Pet Scale, capped so frames are never upscaled)."""
+    if scale is None:
+        scale = getattr(settings, 'pet_display_scale', 1.0)
+    return [int(i * float(scale)) for i in anchor]
+
+
+def ticks_per_frame(frame_refresh, tick_ms):
+    """Interaction-timer ticks one frame of a clip stays on screen (whole ticks, at least 1).
+    M3.1: a 21 ms tick (pet_conf interact_speed) divides 1/12 s frames into 4 ticks, so
+    clips play at about 12 fps instead of 10 (5 ticks of 20 ms)."""
+    tick_s = float(tick_ms) / 1000.0
+    if tick_s <= 0:
+        return 1
+    return max(1, math.ceil(round(float(frame_refresh) / tick_s, 6)))
 
 
 ##############################
@@ -38,6 +247,8 @@ class Animation_worker(QObject):
     sig_move_anim = Signal(float, float, name='sig_move_anim')
     sig_repaint_anim = Signal()
     acc_regist = Signal(dict, name='acc_regist')
+    sig_walk_done = Signal(name='sig_walk_done')     # M3.2: a walk clip ended (or was cut)
+    sig_clip_released = Signal(name='sig_clip_released')   # M3.3: finished its clip for a line
 
     def __init__(self, pet_conf, parent=None):
         """
@@ -55,6 +266,20 @@ class Animation_worker(QObject):
         self.act_cmlt_prob = self._cal_prob(self.current_status)
         self.is_killed = False
         self.is_paused = False
+        # M3.2: frame pacing from a monotonic clock; injectable for tests.
+        self._clock = time.monotonic
+        self._sleep = time.sleep
+        self._skip = False
+        # M3.2 (set by the pet): which wall she touches ('left'/'right'/None), and the shared
+        # idle chooser (her own clips, never one of the last 3) for random idle clips.
+        self.wall_side = None
+        self.idle_picker = None
+        # D2.3 (set by the pet): her room toward each side, {'left': px, 'right': px} or None.
+        self.walk_room = None
+        # M3.3: a line is waiting for the clip being played (finish_clip): absolute deadline and
+        # the time the clip lets the line take over (computed on the playing thread).
+        self._finish_deadline = None
+        self._yield_at = None
 
 
     def run(self):
@@ -64,7 +289,10 @@ class Animation_worker(QObject):
         while not self.is_killed:
             #if self.is_hp:
             #    print(self.is_hp, self.is_fv)
-            self.random_act()
+            if getattr(self, '_finish_deadline', None) is not None:
+                self._release_clip()        # a line arrived between two clips: it goes first
+            else:
+                self.random_act()
 
             while self.is_paused:
                 time.sleep(0.2)
@@ -79,9 +307,52 @@ class Animation_worker(QObject):
 
     def pause(self):
         self.is_paused = True
+        self._finish_deadline = None
 
     def resume(self):
         self.is_paused = False
+        self._finish_deadline = None
+
+    def skip_clip(self):
+        """M3.2: end the clip being played now (a walk stuck against a wall); the next random
+        decision follows."""
+        self._skip = True
+
+    # --- M3.3: a line never cuts the random animation's clip mid-way --------------------------
+    @property
+    def finishing(self):
+        """True while the clip being played finishes for a line (it has not paused yet)."""
+        return getattr(self, '_finish_deadline', None) is not None and not self.is_paused \
+            and not self.is_killed
+
+    def finish_clip(self, grace_s=FINISH_CLIP_S):
+        """A line arrived: play the current clip to its end or natural point (`yield_time`), at
+        most `grace_s` from now, then pause and emit `sig_clip_released`. Never extends a
+        deadline already running."""
+        if self.is_paused or self.is_killed or getattr(self, '_finish_deadline', None) is not None:
+            return
+        self._yield_at = None
+        self._finish_deadline = getattr(self, '_clock', time.monotonic)() + float(grace_s)
+
+    def cancel_finish(self):
+        """The line ended before the clip did: the clip and the random life just go on."""
+        self._finish_deadline = None
+        self._yield_at = None
+
+    def _release_clip(self):
+        self._finish_deadline = None
+        self._yield_at = None
+        self.is_paused = True
+        self.sig_clip_released.emit()
+
+    def _clip_yield(self, act, started, now, shown, deadline):
+        """When the clip `act` (started at `started`, frame `shown` on screen) lets the line in."""
+        if yields_at_once(act, self.pet_conf):
+            return now                      # her stand, or a walk with no step markers
+        frame_s = float(act.frame_refresh)
+        total = len(act.images) * act.act_num
+        upto = total if frame_s <= 0 else min(total, int((deadline - started) / frame_s) + 1)
+        return yield_time(started, now, frame_s, deadline, total, natural_points(act, shown, upto))
 
     def update_prob(self):
         self.current_status = [settings.pet_data.hp_tier,settings.pet_data.fv_lvl] #self._cal_status_type()
@@ -186,7 +457,26 @@ class Animation_worker(QObject):
                     act_name = list(settings.act_data.allAct_params[settings.petname].keys())[act_idx]
                     acts, accs = self._get_acts(act_name)
 
+        acts = Animation_worker._fresh_idle(self, acts)
         self._run_acts(acts, accs)
+
+    def _fresh_idle(self, acts):
+        """M3.2: a random idle clip (sit, read, happy...) is replaced by the pet's idle chooser
+        (her own clips, none of the last 3), so both pickers share one varied pool."""
+        picker = getattr(self, 'idle_picker', None)
+        if picker is None or not acts:
+            return acts
+        first = acts[0]
+        if not isinstance(first, Act) or first.need_move or first.act_name in NOT_IDLE_CLIPS:
+            return acts
+        try:
+            pose = picker()
+        except Exception:
+            return acts
+        act = getattr(self.pet_conf, 'act_dict', {}).get(pose)
+        if act is None:
+            return acts
+        return [act] + list(acts[1:])
 
     
     def _get_acts(self, act_name):
@@ -227,10 +517,19 @@ class Animation_worker(QObject):
         :return:
         """
         #start = time.time()
+        self._skip = False
         if accs:
             self.acc_regist.emit(accs)
         for act in acts:
+            if self._skip or self.is_paused or self.is_killed:
+                break
+            if getattr(self, '_finish_deadline', None) is not None:
+                self._release_clip()        # M3.3: the clip a line waited for is over
+                break
             self._run_act(act)
+        else:
+            if getattr(self, '_finish_deadline', None) is not None and not self.is_paused:
+                self._release_clip()
         #print('%.2fs'%(time.time()-start))
         #self.is_run_act = False
 
@@ -247,43 +546,71 @@ class Animation_worker(QObject):
                     break
                 if self.is_killed:
                     break
+                if getattr(self, '_finish_deadline', None) is not None:
+                    break                   # M3.3: a pause between clips: the line goes first
                 time.sleep(act[0]/1000)
             return
 
-        for i in range(act.act_num):
-
-            #while self.is_paused:
-            #    time.sleep(0.2)
-            if self.is_paused:
-                break
-            if self.is_killed:
-                break
-
-            for img in act.images:
-
-                #while self.is_paused:
-                #    time.sleep(0.2)
-                if self.is_paused:
+        act = self._away_from_wall(act)
+        walking = is_walk(act)
+        prefetch_frames(act.images)
+        clock = getattr(self, '_clock', time.monotonic)
+        sleep = getattr(self, '_sleep', time.sleep)
+        n_images = len(act.images)
+        total = n_images * act.act_num
+        # M3.2: frame k is due at started + k * frame_refresh (monotonic clock). A late frame
+        # does not push the later ones back; when a whole frame is missed it is skipped and its
+        # step is still walked, so the speed on screen stays the same.
+        started, shown = clock(), -1
+        try:
+            while n_images:
+                if self.is_paused or self.is_killed or getattr(self, '_skip', False):
                     break
-                if self.is_killed:
+                now = clock()
+                # M3.3: a line is waiting: stop at the clip's end or natural point (yield_time).
+                deadline = getattr(self, '_finish_deadline', None)   # set by the UI thread
+                if deadline is not None:
+                    if getattr(self, '_yield_at', None) is None:
+                        self._yield_at = self._clip_yield(act, started, now, shown, deadline)
+                    if now >= self._yield_at - 1e-9:
+                        break
+                index = due_frame(started, now, act.frame_refresh, shown)
+                if index >= total:
                     break
-
-                #global current_img, previous_img
                 settings.previous_img = settings.current_img
-                settings.current_img = img
+                settings.current_img = act.images[index % n_images]
                 settings.previous_anchor = settings.current_anchor
-                settings.current_anchor =  [int(i * settings.tunable_scale) for i in act.anchor]
+                settings.current_anchor = scaled_anchor(act.anchor)
                 # Mia: publicar el acto que pinta Animation_worker (C1 revisión 2: moonwalk).
                 settings.anim_act = act
-                #print('anim', settings.previous_anchor, settings.current_anchor)
                 self.sig_setimg_anim.emit()
-                #time.sleep(act.frame_refresh) ######## sleep 和 move 是不是应该反过来？
-                #if act.need_move:
-                self._move(act) #self.pos(), act)
-                time.sleep(act.frame_refresh) 
-                #else:
-                #    self._static_act(self.pos())
+                self._move(act, index - shown)
+                shown = index
+                wait = started + (index + 1) * act.frame_refresh - clock()
+                if wait > 0:
+                    sleep(wait)
                 self.sig_repaint_anim.emit()
+        finally:
+            if walking:
+                self.sig_walk_done.emit()
+
+    def _away_from_wall(self, act):
+        """M3.2: a walk toward the wall she already touches never starts: she turns around.
+        D2.3: nor a walk toward a side with less room than one full walk; with no room on either
+        side the walk becomes an idle clip."""
+        if not is_walk(act):
+            return act
+        if getattr(self, 'wall_side', None) is not None:
+            try:
+                side = self.wall_side()
+            except Exception:
+                side = None
+            if side == act.direction:
+                turned = self.pet_conf.right if side == 'left' else self.pet_conf.left
+                act = turned if is_walk(turned) else act
+        if getattr(self, 'walk_room', None) is None:
+            return act
+        return walk_with_room(act, self.walk_room, self.pet_conf, getattr(self, 'idle_picker', None))
     '''
     def _static_act(self, pos: QPoint) -> None:
         """
@@ -308,35 +635,21 @@ class Animation_worker(QObject):
         self.move(new_x, new_y)
     '''
 
-    def _move(self, act: QAction) -> None: #pos: QPoint, act: QAction) -> None:
+    def _move(self, act: QAction, frames: int = 1) -> None: #pos: QPoint, act: QAction) -> None:
         """
         移动动作
         :param pos: 当前位置
         :param act: 动作
+        :param frames: frames this step covers (M3.2: a skipped late frame still walks)
         :return
         """
         #print(act.direction, act.frame_move)
-        plus_x = 0.
-        plus_y = 0.
-        direction = act.direction
-        if direction is None:
-            pass
-        else:
-            if direction == 'right':
-                plus_x = act.frame_move
-
-            if direction == 'left':
-                plus_x = -act.frame_move
-
-            if direction == 'up':
-                plus_y = -act.frame_move
-
-            if direction == 'down':
-                plus_y = act.frame_move
+        plus_x, plus_y = frame_step(act)
         if plus_x == 0 and plus_y == 0:
             pass
         else:
-            self.sig_move_anim.emit(plus_x, plus_y)
+            frames = max(1, int(frames))
+            self.sig_move_anim.emit(plus_x * frames, plus_y * frames)
 
 
 
@@ -372,6 +685,16 @@ class Interaction_worker(QObject):
         self.interact = None
         self.act_name = None # everytime making act_name to None, don't forget to set settings.playid to 0
         self.interact_altered = False
+        # M3.2: a looping clip (talk while she speaks) restarts from frame 0 at its end instead
+        # of finishing; frame times come from this monotonic clock.
+        self.loop = False
+        self.clock = time.monotonic
+        # M3.3: a line waits for this clip (finish_clip); a held clip shows its frame and does
+        # not advance (hanging on the wall); the next clip may start on a given frame.
+        self._finish_deadline = None
+        self._yield_at = None
+        self.frozen = False
+        self._start_frame = 0
         self.hptier = sys_hp_tiers #[0, 50, 80, 100]
         self.pat_idx = None
 
@@ -392,10 +715,69 @@ class Interaction_worker(QObject):
         elif self.interact not in dir(self):
             self.interact = None
         else:
+            altered = self.interact_altered
             if self.interact_altered:
                 self.empty_interact()
                 self.interact_altered = False
+            if getattr(self, 'frozen', False):
+                return                      # M3.3: hanging on the wall, the frame stays
+            if not altered:
+                self._plan_yield()          # M3.3: a clip already on screen plans at once
+            if self._clip_yields():
+                return
             getattr(self,self.interact)(self.act_name)
+            self._plan_yield()
+
+    # --- M3.3: a line never cuts a clip mid-way ----------------------------------------------
+    @property
+    def finishing(self):
+        """True while the clip being played finishes for a line."""
+        return getattr(self, '_finish_deadline', None) is not None and self.interact is not None
+
+    def finish_clip(self, grace_s=FINISH_CLIP_S):
+        """A line arrived: play the current clip to its end or natural point (`yield_time`), at
+        most `grace_s` from now, then stop it (sig_act_finished). Never extends a deadline."""
+        if self.interact is None or getattr(self, '_finish_deadline', None) is not None:
+            return
+        self._yield_at = None
+        self._finish_deadline = self.clock() + float(grace_s)
+
+    def cancel_finish(self):
+        self._finish_deadline = None
+        self._yield_at = None
+
+    def hold(self):
+        """Keep the frame on screen and stop advancing the clip (she hangs on the wall)."""
+        self.frozen = True
+
+    def _clip_yields(self):
+        deadline = getattr(self, '_finish_deadline', None)
+        if deadline is None:
+            return False
+        due = self._yield_at if getattr(self, '_yield_at', None) is not None else deadline
+        if self.clock() + 1e-9 < due:
+            return False
+        self.stop_interact()
+        return True
+
+    def _plan_yield(self):
+        """Once the clip is on screen: when it lets the waiting line in (`yield_time`)."""
+        deadline = getattr(self, '_finish_deadline', None)
+        if deadline is None or getattr(self, '_yield_at', None) is not None or self.interact is None:
+            return
+        act, started, now = settings.current_act, getattr(settings, 'act_started_at', None), self.clock()
+        if not isinstance(act, Act) or started is None or yields_at_once(act, self.pet_conf):
+            self._yield_at = now
+            return
+        frame_s = float(act.frame_refresh)
+        wraps = self.loop or self.interact in ('followTarget', 'mousedrag')
+        total = None if wraps else len(act.images) * act.act_num
+        upto = int((deadline - started) / frame_s) + 1 if frame_s > 0 else 0
+        if total is not None:
+            upto = min(upto, total)
+        shown = getattr(settings, 'act_frame_shown', -1)
+        self._yield_at = yield_time(started, now, frame_s, deadline, total,
+                                    natural_points(act, shown, upto))
 
     def _get_animation_type(self, act_name):
         act_conf = settings.act_data.allAct_params[settings.petname]
@@ -411,7 +793,12 @@ class Interaction_worker(QObject):
         elif act_type == 'customized':
             return 'customized'
 
-    def start_interact(self, interact, act_name=None):
+    def start_interact(self, interact, act_name=None, loop=False, start_frame=0):
+        self._follow_trail = None
+        self.loop = bool(loop)
+        self._finish_deadline = self._yield_at = None
+        self.frozen = False
+        self._start_frame = max(0, int(start_frame or 0))   # M3.3: e.g. climb_down on the held frame
         # If Act selected from menu/panel, judge animation type first
         if interact == "actlist":
             interact = self._get_animation_type(act_name)
@@ -466,6 +853,10 @@ class Interaction_worker(QObject):
         self.is_paused = False
 
     def stop_interact(self):
+        self._follow_trail = None
+        self.loop = False
+        self._finish_deadline = self._yield_at = None
+        self.frozen = False
         self.interact = None
         self.act_name = None
         self.first_acc = False
@@ -476,6 +867,7 @@ class Interaction_worker(QObject):
     def empty_interact(self):
         settings.playid = 0
         settings.act_id = 0
+        settings.act_started_at = None      # the next clip starts from frame 0, even the same one
 
     def sample_pat_anim(self):
         hp_tier = settings.pet_data.hp_tier
@@ -484,13 +876,34 @@ class Interaction_worker(QObject):
         act_idx = random.choices([i for i in range(len(settings.HP_TIERS))], weights=prob, k=1)[0]
         return act_idx
 
-    def img_from_act(self, act):
+    def img_from_act(self, act, wrap=True):
+        """Show the frame of `act` due now and return True when the clip has played to its end.
 
-        if settings.current_act != act:
-            settings.previous_act = settings.current_act
-            settings.current_act = act
-            settings.anim_act = None  # Mia: la interacción manda; ver set_img
+        M3.2: the frame comes from the time since the clip started (monotonic clock, see
+        `due_frame`), not from counting ticks, so a late tick does not stretch the later frames.
+        With `wrap` the clip goes on from frame 0 at its end (drag, fall, walks while following,
+        a looping talk); without it the last frame stays until the caller moves on.
+        `settings.act_frames_advanced` is how many frames this call advanced (for movement)."""
+        clock = getattr(self, 'clock', None) or time.monotonic
+        now = clock()
+        if settings.current_act != act or getattr(settings, 'act_started_at', None) is None:
+            if settings.current_act != act:
+                settings.previous_act = settings.current_act
+                settings.current_act = act
+                settings.anim_act = None  # Mia: la interacción manda; ver set_img
             settings.playid = 0
+            settings.act_started_at = now
+            settings.act_frame_shown = -1
+            start = getattr(self, '_start_frame', 0)
+            if start and not isinstance(act, list) and len(act.images):
+                # M3.3: start on frame `start` (climb_down on the frame she holds: no jump).
+                start %= len(act.images)
+                settings.act_started_at = now - start * float(act.frame_refresh)
+                settings.act_frame_shown = start - 1
+            self._start_frame = 0
+            if not isinstance(act, list):
+                prefetch_frames(act.images)     # M3.2: decode the rest of the clip in the background
+        settings.act_frames_advanced = 0
 
         # if this is a skipping act
         if isinstance(act, list):
@@ -498,18 +911,37 @@ class Interaction_worker(QObject):
             settings.playid += 1
             if settings.playid >= n_repeat:
                 settings.playid = 0
-        else:
-            n_repeat = math.ceil(act.frame_refresh / (self.pet_conf.interact_speed / 1000))
-            img_list_expand = [item for item in act.images for i in range(n_repeat)] * act.act_num
-            img = img_list_expand[settings.playid]
+                return True
+            return False
 
-            settings.playid += 1
-            if settings.playid >= len(img_list_expand):
-                settings.playid = 0
-            settings.previous_img = settings.current_img
-            settings.current_img = img
-            settings.previous_anchor = settings.current_anchor
-            settings.current_anchor = [int(i * settings.tunable_scale) for i in act.anchor]
+        n_images = len(act.images)
+        total = n_images * act.act_num
+        if not total:
+            return True
+        frame_s = float(act.frame_refresh)
+        shown = getattr(settings, 'act_frame_shown', -1)
+        index = int((now - settings.act_started_at) / frame_s + 1e-9) if frame_s > 0 else shown + 1
+        finished = False
+        if index >= total:
+            finished = True
+            if wrap:
+                laps = index // total
+                settings.act_started_at += laps * total * frame_s
+                index -= laps * total
+                shown -= laps * total
+            else:
+                index = total - 1
+        if index > shown:
+            settings.act_frames_advanced = index - shown
+            settings.act_frame_shown = shown = index
+        # Ticks of the interaction timer this clip has run (what playid counted before M3.2).
+        tick_s = float(self.pet_conf.interact_speed) / 1000.0
+        settings.playid = int((now - settings.act_started_at) / tick_s) if tick_s > 0 else 0
+        settings.previous_img = settings.current_img
+        settings.current_img = act.images[shown % n_images] if shown >= 0 else act.images[0]
+        settings.previous_anchor = settings.current_anchor
+        settings.current_anchor = scaled_anchor(act.anchor)
+        return finished
 
     def animat(self, act_name):
         #if act_name == 'on_floor':
@@ -531,6 +963,10 @@ class Interaction_worker(QObject):
         
         acts = self.pet_conf.random_act[acts_index]
         #print(settings.act_id, len(acts))
+        if settings.act_id >= len(acts) and getattr(self, 'loop', False) and acts:
+            # M3.2: a looping clip (talk) goes on from frame 0 of the same clip.
+            settings.act_id = 0
+            settings.act_started_at = None
         if settings.act_id >= len(acts):
             #settings.act_id = 0
             #self.interact = None
@@ -538,10 +974,8 @@ class Interaction_worker(QObject):
             #self.sig_act_finished.emit()
         else:
             act = acts[settings.act_id]
-            n_repeat = math.ceil(act.frame_refresh / (self.pet_conf.interact_speed / 1000))
-            n_repeat *= len(act.images) * act.act_num
-            self.img_from_act(act)
-            if settings.playid >= n_repeat-1:
+            looping = getattr(self, 'loop', False) and len(acts) == 1
+            if self.img_from_act(act, wrap=looping) and not looping:
                 settings.act_id += 1
 
             if act_name == 'onfloor' and settings.fall_right:
@@ -549,7 +983,7 @@ class Interaction_worker(QObject):
                 transform = QTransform()
                 transform.scale(-1, 1)
                 settings.current_img = settings.current_img.transformed(transform) #.mirrored(True, False)
-                settings.current_anchor = [int(i * settings.tunable_scale) for i in act.anchor]
+                settings.current_anchor = scaled_anchor(act.anchor)
                 settings.current_anchor = [-settings.current_anchor[0], settings.current_anchor[1]]
 
             if settings.previous_img != settings.current_img or settings.previous_anchor != settings.current_anchor:
@@ -580,10 +1014,7 @@ class Interaction_worker(QObject):
             #self.sig_act_finished.emit()
         else:
             act = acts[settings.act_id]
-            n_repeat = math.ceil(act.frame_refresh / (self.pet_conf.interact_speed / 1000))
-            n_repeat *= len(act.images) * act.act_num
-            self.img_from_act(act)
-            if settings.playid >= n_repeat-1:
+            if self.img_from_act(act, wrap=False):
                 settings.act_id += 1
 
             if settings.previous_img != settings.current_img or settings.previous_anchor != settings.current_anchor:
@@ -617,14 +1048,7 @@ class Interaction_worker(QObject):
             #self.sig_act_finished.emit()
         else:
             act = acts[settings.act_id]
-            # if this is a skipping act
-            if isinstance(act, list):
-                n_repeat = math.ceil(act[0]/self.pet_conf.interact_speed) * act[1]
-            else:
-                n_repeat = math.ceil(act.frame_refresh / (self.pet_conf.interact_speed / 1000))
-                n_repeat *= len(act.images) * act.act_num
-            self.img_from_act(act)
-            if settings.playid >= n_repeat-1:
+            if self.img_from_act(act, wrap=False):
                 settings.act_id += 1
 
             if settings.previous_img != settings.current_img or settings.previous_anchor != settings.current_anchor:
@@ -641,10 +1065,7 @@ class Interaction_worker(QObject):
             #self.sig_act_finished.emit()
         else:
             act = acts[settings.act_id]
-            n_repeat = math.ceil(act.frame_refresh / (self.pet_conf.interact_speed / 1000))
-            n_repeat *= len(act.images) * act.act_num
-            self.img_from_act(act)
-            if settings.playid >= n_repeat-1:
+            if self.img_from_act(act, wrap=False):
                 settings.act_id += 1
 
             if settings.previous_img != settings.current_img or settings.previous_anchor != settings.current_anchor:
@@ -682,11 +1103,8 @@ class Interaction_worker(QObject):
                 else:
                     acts = self.pet_conf.fall
 
-                n_repeat = math.ceil(acts.frame_refresh / (self.pet_conf.interact_speed / 1000))
-                n_repeat *= len(acts.images) * acts.act_num
-
-                self.img_from_act(acts)
-                if settings.playid >= n_repeat-1:
+                # The pre-fall clip plays once (then the fall loops).
+                if self.img_from_act(acts, wrap=settings.prefall != 1):
                     settings.prefall = 0
 
                 #global fall_right
@@ -695,7 +1113,7 @@ class Interaction_worker(QObject):
                     transform = QTransform()
                     transform.scale(-1, 1)
                     settings.current_img = settings.current_img.transformed(transform)
-                    settings.current_anchor = [int(i * settings.tunable_scale) for i in acts.anchor]
+                    settings.current_anchor = scaled_anchor(acts.anchor)
                     settings.current_anchor = [-settings.current_anchor[0], settings.current_anchor[1]]
 
                 if settings.previous_img != settings.current_img or settings.previous_anchor != settings.current_anchor:
@@ -729,37 +1147,23 @@ class Interaction_worker(QObject):
 
         self.sig_move_inter.emit(plus_x, plus_y)
 
-    def _move(self, act: QAction) -> None: #pos: QPoint, act: QAction) -> None:
+    def _move(self, act: QAction, frames=None) -> None: #pos: QPoint, act: QAction) -> None:
         """
         在 Thread 中发出移动Signal
         :param act: 动作
+        :param frames: frames this step covers (default: the frames the last img_from_act
+                       advanced; M3.2: a skipped late frame still walks)
         :return
         """
         #print(act.direction, act.frame_move)
-        plus_x = 0.
-        plus_y = 0.
-        direction = act.direction
-
-        if direction is None:
-            pass
-        else:
-            if direction == 'right':
-                plus_x = act.frame_move
-
-            if direction == 'left':
-                plus_x = -act.frame_move
-
-            if direction == 'up':
-                plus_y = -act.frame_move
-
-            if direction == 'down':
-                plus_y = act.frame_move
-
-        #self.sig_move_inter.emit(plus_x, plus_y)
+        plus_x, plus_y = frame_step(act)
         if plus_x == 0 and plus_y == 0:
             pass
         else:
-            self.sig_move_inter.emit(plus_x, plus_y)
+            if frames is None:
+                frames = getattr(settings, 'act_frames_advanced', 1)
+            frames = max(1, int(frames or 1))
+            self.sig_move_inter.emit(plus_x * frames, plus_y * frames)
 
     def use_item(self, item):
         # 宠物进行 三个等级的喂食动画
@@ -797,7 +1201,7 @@ class Interaction_worker(QObject):
         self.query_position.emit(act_name)
         distance = abs(self.main_pos[0] - self.target_pos[0])
 
-        if distance < 5*self.pet_conf.left.frame_move:
+        if distance < 5*frame_step(self.pet_conf.left, 'right')[0]:
             act = self.pet_conf.default
             self.img_from_act(act)
             if settings.previous_img != settings.current_img or settings.previous_anchor != settings.current_anchor:
@@ -805,10 +1209,17 @@ class Interaction_worker(QObject):
 
         else:
             act = [self.pet_conf.left, self.pet_conf.right][int(self.main_pos[0] < self.target_pos[0])]
+            # Against a wall the window cannot move; stop instead of walking in place.
+            if follow_blocked(getattr(self, '_follow_trail', None), self.main_pos[0]):
+                self._follow_trail = None
+                self.stop_interact()
+                return
             self.img_from_act(act)
             if settings.previous_img != settings.current_img or settings.previous_anchor != settings.current_anchor:
                 self.sig_setimg_inter.emit()
                 self._move(act)
+                self._follow_trail = ((getattr(self, '_follow_trail', None) or [])[-(FOLLOW_STUCK_FRAMES - 1):]
+                                      + [self.main_pos[0]])
 
 
     def receive_pos(self, main_pos, target_pos):

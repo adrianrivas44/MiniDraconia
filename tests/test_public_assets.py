@@ -168,10 +168,13 @@ class SpecRejectsReintroduction(unittest.TestCase):
         root = base / 'full-engine'
         (root / 'packaging').mkdir(parents=True)
         shutil.copyfile(POLICY_FILE, root / 'packaging' / 'asset_policy.py')
+        # D2.1: the spec also loads its version-info helper and needs the app icon.
+        shutil.copyfile(POLICY_FILE.with_name('version_info.py'), root / 'packaging' / 'version_info.py')
         (root / 'DyberPet' / 'brain').mkdir(parents=True)
         (base / 'VERSION').write_text('0.0.0\n', encoding='utf-8')
         (root / 'LICENSE').write_text('x', encoding='utf-8')
-        for relative in ('res/role/Draconia/note/voice/head-01.wav', 'res/role/Draconia/a.png') + tuple(extra):
+        for relative in ('res/role/Draconia/note/voice/head-01.wav', 'res/role/Draconia/a.png',
+                         'res/icons/app.ico') + tuple(extra):
             path = root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b'x')
@@ -319,13 +322,13 @@ class BrainConfigIsNotAdvertisedAsWorking(unittest.TestCase):
         return json.loads((ENGINE / 'config' / 'brain.json').read_text(encoding='utf-8'))
 
     def effective_defaults(self):
-        # load_config() cannot be imported without Qt on every host: read its literal return value.
+        # Read the module's literal DEFAULT_CONFIG (what load_config() returns for a new profile)
+        # without importing the package on every host.
         source = (ENGINE / 'DyberPet' / 'brain' / '__init__.py').read_text(encoding='utf-8')
         for node in ast.walk(ast.parse(source)):
-            if isinstance(node, ast.FunctionDef) and node.name == 'load_config':
-                returns = [n for n in ast.walk(node) if isinstance(n, ast.Return)]
-                return ast.literal_eval(returns[-1].value)
-        raise AssertionError('load_config not found')
+            if isinstance(node, ast.Assign) and any(getattr(t, 'id', None) == 'DEFAULT_CONFIG' for t in node.targets):
+                return ast.literal_eval(node.value)
+        raise AssertionError('DEFAULT_CONFIG not found')
 
     def test_file_matches_the_effective_offline_defaults(self):
         data = self.load()

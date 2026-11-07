@@ -6,19 +6,27 @@
   },
   "right_walk": {
     "images": "walkcycle_right",
-    "act_num": 2,
+    "act_num": 4,
     "need_move": true,
     "direction": "right",
-    "frame_move": 3.5,
-    "frame_refresh": 0.08333333333333333
+    "frame_move": 5.16,
+    "frame_refresh": 0.08333333333333333,
+    "step_ends": [
+      7,
+      15
+    ]
   },
   "left_walk": {
     "images": "walkcycle_left",
-    "act_num": 2,
+    "act_num": 4,
     "need_move": true,
     "direction": "left",
-    "frame_move": 3.5,
-    "frame_refresh": 0.08333333333333333
+    "frame_move": 5.16,
+    "frame_refresh": 0.08333333333333333,
+    "step_ends": [
+      7,
+      15
+    ]
   },
   "greet": {
     "images": "greet",
@@ -138,7 +146,8 @@
   "climb": {
     "images": "climb",
     "act_num": 1,
-    "frame_refresh": 0.08333333333333333
+    "frame_refresh": 0.08333333333333333,
+    "frame_move": 7.0
   },
   "peek": {
     "images": "peek_right",
@@ -147,7 +156,25 @@
   },
   "sit": {
     "images": "sit",
-    "act_num": 4,
-    "frame_refresh": 0.32
+    "frames": [
+      0
+    ],
+    "act_num": 1,
+    "frame_refresh": 6.0
+  },
+  "mirror": {
+    "images": "mirror",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "quill": {
+    "images": "quill",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
+  },
+  "yawn": {
+    "images": "yawn",
+    "act_num": 1,
+    "frame_refresh": 0.08333333333333333
   }
 }

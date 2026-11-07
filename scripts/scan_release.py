@@ -1,11 +1,20 @@
 """Metadata-only public release scan (standard library only).
 
     python scripts/scan_release.py [--root DIR] [--zip PACKAGE.zip] [--json]
+                                   [--private-markers FILE]
 
 Checks a source tree (and/or a package ZIP's member names) for private artifacts,
 key/secret signatures, files over 100 MB, symlinks and path traversal.
 Matched secret values are NEVER printed or stored: only rule, path and line number.
 Exit code: 0 no blocking findings, 1 blocking findings, 2 usage error.
+
+Private markers: the scanner knows only generic private paths (Windows `X:\\Users\\...`,
+`/root/`, `/home/<user>/`). A maintainer can add their own machine names, folders or
+account names as literal markers, one per line, in an untracked, git-ignored file
+`.release-private-markers` at the repository root (read when present), or pass
+`--private-markers FILE`. Blank lines and lines starting with `#` are ignored; matching is
+case-insensitive. A marker found in a tree file is a blocking `private-marker` finding; the
+marker text itself is never printed. The markers file at the scanned root is not scanned.
 
 Buckets in the report:
   findings       blocking problems.
@@ -35,7 +44,7 @@ ANY_DEPTH_DIRS = {'__pycache__', '.venv', 'venv', 'profiles', 'logs', '.claude'}
 TOP_LEVEL_DIRS = {'work', 'dist', 'build', 'buildtools', 'staging', 'evidence', 'profile'}
 PRIVATE_SUFFIXES = {'.pem', '.key', '.p12', '.pfx', '.jks', '.keystore', '.gguf', '.onnx', '.safetensors', '.pt', '.pth', '.pyc', '.log'}
 PRIVATE_NAME_PARTS = ('credentials', 'secrets', 'ollama', 'llama-server')
-PRIVATE_EXACT = {'.git-credentials', '.netrc', '.pypirc', '.npmrc'}
+PRIVATE_EXACT = {'.git-credentials', '.netrc', '.pypirc', '.npmrc', '.release-private-markers'}
 ARCHIVE_DIRS = {'__pycache__', '.venv', 'venv', 'profiles', 'profile', 'runtime'}
 FONT_SUFFIXES = {'.ttf', '.otf', '.woff', '.woff2'}
 
@@ -49,7 +58,26 @@ SECRET_PATTERNS = {
     'secret-google': re.compile(rb'AIza[0-9A-Za-z_\-]{35}'),
     'secret-slack': re.compile(rb'xox[baprs]-[A-Za-z0-9-]{10,}'),
 }
-PRIVATE_PATH = re.compile(rb'(?:[A-Za-z]:[\\/](?:Aiu|Users)[\\/]|/root/|/home/[a-z0-9_-]+/|Valhalla|Obsidian)')
+PRIVATE_PATH = re.compile(rb'(?:[A-Za-z]:[\\/]Users[\\/]|/root/|/home/[a-z0-9_-]+/)')
+MARKERS_NAME = '.release-private-markers'
+DEFAULT_MARKERS_FILE = Path(__file__).resolve().parents[1]/MARKERS_NAME
+
+
+def load_private_markers(path):
+    """Literal markers (lower-cased bytes), one per line; [] when the file is absent.
+    Blank lines and `#` comments are ignored."""
+    try:
+        text = Path(path).read_text(encoding='utf-8')
+    except FileNotFoundError:
+        return []
+    markers = []
+    for line in text.splitlines():
+        line = line.strip()
+        if line and not line.startswith('#'):
+            marker = line.encode('utf-8').lower()
+            if marker not in markers:
+                markers.append(marker)
+    return markers
 
 
 ASSET_POLICY_FILE = Path(__file__).resolve().parents[1]/'full-engine'/'packaging'/'asset_policy.py'
@@ -97,8 +125,10 @@ def _legal_key(relative):
     return None
 
 
-def scan_tree(root, allow=None, max_bytes=MAX_BYTES):
+def scan_tree(root, allow=None, max_bytes=MAX_BYTES, markers=()):
+    """`markers`: extra private literals (bytes or str, see load_private_markers)."""
     allow = DEFAULT_ALLOW if allow is None else allow
+    markers = [m.encode('utf-8').lower() if isinstance(m, str) else bytes(m).lower() for m in markers if m]
     root = Path(root)
     report = _blank_report()
     policy = _asset_policy()
@@ -114,6 +144,8 @@ def scan_tree(root, allow=None, max_bytes=MAX_BYTES):
             path = Path(folder)/name
             relative = path.relative_to(root).as_posix()
             parts = PurePosixPath(relative).parts
+            if relative == MARKERS_NAME:
+                continue    # the maintainer's own untracked marker list (git-ignored)
             report['stats']['files'] += 1
             if path.is_symlink():
                 _add(report, 'findings', 'symlink', relative, allow)
@@ -140,9 +172,22 @@ def scan_tree(root, allow=None, max_bytes=MAX_BYTES):
                     match = pattern.search(data)
                     if match:
                         _add(report, 'findings', rule, relative, allow, line=data.count(b'\n', 0, match.start()) + 1)
+                # Another private product built on this engine must not leak into the public tree.
+                low_data = data.lower()
+                found = [low_data.find(name.encode('utf-8')) for name in getattr(policy, 'OTHER_PRODUCT_NAMES', ())]
+                found = [i for i in found if i >= 0]
+                position = min(found) if found else -1
+                if position >= 0:
+                    _add(report, 'findings', 'other-product-input', relative, allow, line=data.count(b'\n', 0, position) + 1)
                 match = PRIVATE_PATH.search(data)
                 if match:
                     _add(report, 'review', 'private-path', relative, line=data.count(b'\n', 0, match.start()) + 1)
+                if markers:
+                    low = data.lower()
+                    hits = [i for i in (low.find(m) for m in markers) if i >= 0]
+                    if hits:
+                        _add(report, 'findings', 'private-marker', relative, allow,
+                             line=data.count(b'\n', 0, min(hits)) + 1)
     return report
 
 
@@ -192,12 +237,19 @@ def main(argv=None):
     parser.add_argument('--root', default=str(Path(__file__).resolve().parents[1]), help='tree to scan (default: this repository)')
     parser.add_argument('--zip', help='package ZIP whose member names are checked')
     parser.add_argument('--json', action='store_true', help='print the report as JSON')
+    parser.add_argument('--private-markers', metavar='FILE',
+                        help='extra private literals, one per line (default: %s at the repository root, '
+                             'when present)' % MARKERS_NAME)
     args = parser.parse_args(argv)
     root = Path(args.root)
     if not root.is_dir() or (args.zip and not Path(args.zip).is_file()):
         print('scan_release: root directory or zip not found', file=sys.stderr)
         return 2
-    reports = {'tree': scan_tree(root)}
+    if args.private_markers and not Path(args.private_markers).is_file():
+        print('scan_release: private markers file not found', file=sys.stderr)
+        return 2
+    markers = load_private_markers(args.private_markers or DEFAULT_MARKERS_FILE)
+    reports = {'tree': scan_tree(root, markers=markers)}
     if args.zip:
         reports['archive'] = scan_archive(args.zip)
     blocking = sum(len(r['findings']) for r in reports.values())

@@ -38,9 +38,14 @@ class TempCase(unittest.TestCase):
 
 class PublicBuildEnvironment(TempCase):
     def test_no_private_absolute_paths_in_the_builder(self):
-        text = (REPO / 'package_scripted.py').read_text(encoding='utf-8')
-        for marker in ('D:\\Aiu', 'D:/Aiu', 'Aiu', '/root/', 'hito0', 'Valhalla', 'C:\\Users', '/home/'):
-            self.assertFalse(marker in text, 'private path marker in builder: ' + marker)
+        spec = importlib.util.spec_from_file_location('scan_release_for_builder', REPO / 'scripts' / 'scan_release.py')
+        scan = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(scan)
+        data = (REPO / 'package_scripted.py').read_bytes()
+        match = scan.PRIVATE_PATH.search(data)
+        self.assertIsNone(match, 'private path in builder: %r' % (match.group(0) if match else None))
+        for marker in ('/root/', 'C:\\Users', '/home/'):
+            self.assertNotIn(marker, data.decode('utf-8'), 'private path marker in builder: ' + marker)
 
     def test_default_environment_does_not_add_buildtools_unless_asked(self):
         env = self.pkg.build_environment(self.base / 'p', buildtools=[])

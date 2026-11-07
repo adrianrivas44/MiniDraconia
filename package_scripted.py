@@ -1,4 +1,4 @@
-"""Portable public build of MiniDraconia (Windows, Python 3.11): SCRIPTED offline only.
+"""Portable public build of MiniDraconia (Windows, Python 3.11): offline by default.
 
 Builds with a normally installed PyInstaller (optionally an explicitly supplied
 external buildtools folder), verifies the result and writes a versioned,
@@ -7,8 +7,13 @@ never-overwritten ZIP:
     python package_scripted.py --preflight-only
     python package_scripted.py [--buildtools <absolute folder>] [--allow-missing-docs]
 
-No model, inference runtime, cloud provider, credentials or user state are
-packaged. Nothing here is a legal determination (see LEGAL_NOTE).
+No model, inference runtime, provider account, API key, relay seed or user state is
+packaged: the public ZIP talks offline until a user connects their own AI in Settings. A
+self-hosted relay seed (minidraconia_relay.json) or a voice pack (voice_pack/) can only be
+placed beside one's own executable after this builder, and this builder refuses one found in
+its inputs or output. Any input of
+another product built on this engine fails the build (other_product_inputs).
+Nothing here is a legal determination (see LEGAL_NOTE).
 """
 from pathlib import Path, PurePosixPath
 import argparse
@@ -108,6 +113,10 @@ def qt_models_inventory():
     if not inventory:
         raise RuntimeError('No verified Qt Models package resources')
     return inventory
+
+# Per-user additions that must never be a public build input (asset_policy rule names).
+PRIVATE_INPUT_RULES = ('relay-seed', 'own-key-file', 'voice-pack')
+
 
 def forbidden_artifact(name, path=None, qt_inventory=None):
     from pathlib import PurePosixPath
@@ -465,6 +474,30 @@ def verify_archive(archive, expected, extract_dir, qt_inventory=None):
         raise RuntimeError('Extracted content mismatch (%d differing files), e.g. %s' % (len(differing), differing[:5]))
     return extracted
 
+_TEXT_SUFFIXES = {'.py', '.json', '.md', '.txt', '.spec', '.cfg', '.toml', '.yml', '.yaml', '.ini', '.ps1', '.bat', '.svg', ''}
+
+
+def other_product_inputs(root=ROOT):
+    """Build inputs (paths or text) that name another private product built on this engine.
+    Any hit fails the preflight: nothing of it may reach the public build."""
+    root = Path(root)
+    policy = asset_policy()
+    words = [name.encode('utf-8') for name in policy.OTHER_PRODUCT_NAMES]
+    hits = []
+    for name in source_inputs(root):
+        rule = policy.violation(name)
+        if rule == 'other-product-input':
+            hits.append(name)
+            continue
+        path = root/name
+        if path.suffix.lower() not in _TEXT_SUFFIXES or path.stat().st_size > 4 * 1024 * 1024:
+            continue
+        data = path.read_bytes().lower()
+        if any(word in data for word in words):
+            hits.append(name)
+    return hits
+
+
 def source_inputs(root=ROOT):
     """sha256 of every source file that feeds the build (no caches, no outputs)."""
     root = Path(root)
@@ -565,6 +598,12 @@ def preflight(options):
     except Exception as exc:
         problems.append('Qt RECORD provenance gate: %s' % exc)
     problems += qt_notice_problems()
+    leftovers = other_product_inputs()
+    if leftovers:
+        problems.append('Another product\'s build inputs are present (%d): %s' % (len(leftovers), ', '.join(leftovers[:10])))
+    seeds = [name for name in source_inputs() if asset_policy().violation(name) in PRIVATE_INPUT_RULES]
+    if seeds:
+        problems.append('A relay seed, key file or voice pack is in the build inputs: ' + ', '.join(seeds[:10]))
     docs = docs_preflight()
     if not docs['complete'] and not options.allow_missing_docs:
         problems.append('Required public docs missing: ' + ', '.join(docs['missing']) + ' (or pass --allow-missing-docs)')
@@ -683,8 +722,9 @@ def build(options):
     _write_json(source/'BUILD-INPUTS.json', inputs)
     files = hash_tree(source, qt_inventory)
     _write_json(source/'PACKAGE-MANIFEST.json', {
-        'product': 'MiniDraconia SCRIPTED offline', 'version': version, 'build_id': build_id, 'candidate': True,
-        'stable_accepted': False, 'byo_cloud': 'not implemented', 'legal_note': LEGAL_NOTE,
+        'product': 'MiniDraconia', 'version': version, 'build_id': build_id, 'candidate': True,
+        'stable_accepted': False, 'conversation': 'pet events answer from stored lines in every mode; typed chat offline by default, own key (OpenAI-compatible) optional; no relay seed, no voice pack',
+        'byo_cloud': 'own key, opt-in in Settings', 'legal_note': LEGAL_NOTE,
         'files': files, 'note': 'Lists every file in this folder except PACKAGE-MANIFEST.json itself.'})
     expected = hash_tree(source, qt_inventory)
     archive = Path(options.output_dir)/archive_name(version, build_id, docs_complete)

@@ -3,7 +3,7 @@
   "height": 460,
   "scale": 1.0,
   "refresh": 5,
-  "interact_speed": 0.02,
+  "interact_speed": 0.021,
   "default": "default",
   "up": "default",
   "down": "default",
@@ -14,6 +14,23 @@
   "prefall": "drag",
   "on_floor": "onfloor",
   "patpat": "patpat",
+  "idle_poses": {
+    "tea": 3,
+    "spell": 2.5,
+    "read": 2,
+    "sit": 2,
+    "think": 2,
+    "hairflip": 2,
+    "stretch": 1.5,
+    "shy": 1.5,
+    "happy": 1.5,
+    "mirror": 1.5,
+    "quill": 1.5,
+    "slowclap": 1,
+    "bored": 1,
+    "peek": 1,
+    "doze": 0.5
+  },
   "random_act": [
     {
       "name": "Stand",
@@ -304,8 +321,42 @@
       ]
     },
     {
+      "name": "mirror",
+      "act_list": [
+        "mirror"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "quill",
+      "act_list": [
+        "quill"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
+      "name": "yawn",
+      "act_list": [
+        "yawn"
+      ],
+      "act_prob": 0,
+      "act_type": [
+        0,
+        0
+      ]
+    },
+    {
       "name": "Sleep",
       "act_list": [
+        "yawn",
         "doze",
         "sleep"
       ],

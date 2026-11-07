@@ -1,7 +1,86 @@
 {
+  "_about": "Draconia offline lines (English). Shown when no brain is connected (no relay, no own key) or the connection fails. One key per pet event; 'chat' answers typed messages honestly: offline she cannot really read them.",
+  "greet": [
+    "There you are. The day can begin properly now.",
+    "Good. I was running out of things to judge.",
+    "Back already? I had only just arranged the desktop.",
+    "Morning, or whatever hour you call this. I am ready.",
+    "You switched it on. Sensible decision.",
+    "Ah. Company. Try to be interesting."
+  ],
+  "pat": [
+    "One pat. I counted.",
+    "Mind the parting. It took effort.",
+    "Fine. That one was well executed.",
+    "You are getting rather confident with that hand.",
+    "Acceptable. Barely.",
+    "If you must. Gently."
+  ],
+  "pinch": [
+    "Those cheeks are not a public amenity.",
+    "Bold. Unwise, but bold.",
+    "I will remember that. In detail.",
+    "Release. Now. Thank you.",
+    "That was not in the agreement."
+  ],
+  "touch_body": [
+    "Personal space. Look it up.",
+    "Familiarity is earned, not clicked.",
+    "Careful. That is a waistcoat, not a button.",
+    "I felt that. So did my dignity.",
+    "Let us keep our hands where I can judge them."
+  ],
+  "drag": [
+    "Put me down somewhere with a view.",
+    "This is not how one escorts a lady.",
+    "Steady. I bruise my pride easily.",
+    "Wherever you are taking me, it had better be worth it.",
+    "I can walk, you know."
+  ],
+  "fall": [
+    "Intentional. Entirely intentional.",
+    "Nobody saw that. Correct?",
+    "Gravity and I will be having words.",
+    "A controlled descent. Mostly.",
+    "Landed. Applause is optional, but appreciated."
+  ],
+  "idle": [
+    "Quiet afternoon. I approve, cautiously.",
+    "If you need an opinion, I have several.",
+    "Still here. Still impeccable.",
+    "Your focus is admirable. Mine is on you.",
+    "I could reorganise your icons. I will not. Yet.",
+    "Take a breath. The work will still be there."
+  ],
+  "chatter": [
+    "A good book would improve this hour considerably.",
+    "Strategy is just patience with better posture.",
+    "I have decided that green suits this desktop.",
+    "You work better when you stop checking the clock.",
+    "Somebody should water that plant. Not me.",
+    "Elegance is mostly knowing what to leave out.",
+    "I was planning three moves ahead. You interrupted at move two.",
+    "Tea would be civilised right now.",
+    "I keep a list of good ideas. Yours is on it. Once.",
+    "Rain would suit this mood. Pity.",
+    "There is an easy way and a proper way. Choose well.",
+    "If you finish that, I will be quietly impressed."
+  ],
   "chat": [
-    "A little quiet thought rarely hurts. What would you like to discuss?",
-    "You have my attention. Let us take one thing at a time.",
-    "An interesting moment for a conversation. I am listening through what you write."
+    "My thoughts are not connected right now, so I cannot read that properly. Ask me again later.",
+    "I can see you wrote something. Without a connection I would only be guessing, and I do not guess.",
+    "Offline, I am all presence and no conversation. Try me again when I am connected.",
+    "I would rather give you a real answer than a pretty one. Connect me and ask again.",
+    "Noted. I will give it the attention it deserves once my thoughts are back.",
+    "I am here, but my mind is elsewhere at the moment. A connection would fix that.",
+    "That deserves a proper reply. I cannot give one offline.",
+    "You have my attention, not my words. Not until I am connected."
+  ],
+  "bye": [
+    "Go on. I will keep the desktop in order.",
+    "Rest well. Come back sharper.",
+    "Leaving already? Fine. Do it with style.",
+    "Until later. Do something worth telling me.",
+    "I will be here. Obviously."
   ]
 }

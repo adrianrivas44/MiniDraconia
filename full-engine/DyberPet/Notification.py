@@ -27,6 +27,12 @@ from DyberPet.conf import *
 
 import DyberPet.settings as settings
 
+
+def _pet_frame_h():
+    """M3: logical height of the main pet's current frame (frames are display-ready)."""
+    from DyberPet.frames import shown_size
+    return shown_size(settings.current_img, settings.pet_display_scale)[1]
+
 basedir = settings.BASEDIR
 
 # Mia (M2, docs/contrato-chat.txt): bubble_types que deben REEMPLAZAR al
@@ -731,7 +737,7 @@ class BubbleText(QFrame):
         self.leftover = int(timeout/1000)
         self.countdown = countdown
         self.pos_x = pos_x
-        self.pos_y = int(pos_y-settings.current_img.height()*settings.tunable_scale)
+        self.pos_y = int(pos_y-_pet_frame_h())
         
         # Duration and Animation
         self.timer = QTimer(singleShot=True, timeout=self.hide)
@@ -891,7 +897,7 @@ class BubbleText(QFrame):
 
     def move_to_main(self, pos_x, pos_y):
         self.pos_x = pos_x
-        self.pos_y = pos_y-settings.current_img.height()*settings.tunable_scale
+        self.pos_y = pos_y-_pet_frame_h()
         self.move(self.pos_x-self.width()//2, self.pos_y-self.height()-self.height_margin)
 
     def update_countdown(self):
