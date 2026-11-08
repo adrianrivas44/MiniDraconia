@@ -35,11 +35,11 @@ def _pet_frame_h():
 
 basedir = settings.BASEDIR
 
-# Mia (M2, docs/contrato-chat.txt): bubble_types que deben REEMPLAZAR al
+# bubble_types que deben REEMPLAZAR al
 # globo ya visible del mismo tipo en vez de descartarse (Notification.py
-# dedupe por defecto descarta, ver _bubble_dedup_action). Solo mia_chat: el
+# dedupe por defecto descarta, ver _bubble_dedup_action). Solo companion_chat: el
 # resto de tipos del motor (pat_focus, feed_required, etc.) sigue igual.
-MIA_REPLACEABLE_BUBBLE_TYPES = {"mia_chat"}
+COMPANION_REPLACEABLE_BUBBLE_TYPES = {"companion_chat"}
 
 
 def _bubble_dedup_action(bubble_type, exist_bubble_types: dict):
@@ -50,13 +50,13 @@ def _bubble_dedup_action(bubble_type, exist_bubble_types: dict):
     - ("discard", existing_index): hay un duplicado y NO esta en la lista de
       tipos reemplazables (comportamiento upstream sin cambios).
     - ("replace", existing_index): hay un duplicado y SI esta en la lista de
-      tipos reemplazables (mia_chat); el llamador debe cerrar el existente
+      tipos reemplazables (companion_chat); el llamador debe cerrar el existente
       antes de mostrar el nuevo.
     """
     if not bubble_type or bubble_type not in exist_bubble_types:
         return "new", None
     existing_index = exist_bubble_types[bubble_type]
-    if bubble_type in MIA_REPLACEABLE_BUBBLE_TYPES:
+    if bubble_type in COMPANION_REPLACEABLE_BUBBLE_TYPES:
         return "replace", existing_index
     return "discard", existing_index
 
@@ -369,8 +369,8 @@ class DPNote(QWidget):
         icon = bubble_dict.get('icon', None)
         end_audio = bubble_dict.get('end_audio', None)
 
-        # Deduplicate each type of bubbles (Mia: mia_chat se REEMPLAZA en vez
-        # de descartarse, contrato-chat.txt punto 2/M2 del informe).
+        # Deduplicate each type of bubbles (companion_chat se REEMPLAZA en vez
+        # de descartarse).
         if bubble_type:
             action, existing_index = _bubble_dedup_action(bubble_type, self.exist_bubble_types)
             if action == "discard":

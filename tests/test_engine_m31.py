@@ -60,8 +60,8 @@ class BubbleClamp(unittest.TestCase):
         self.assertEqual(talk.ends_at, clock.t)
 
     def test_the_bubble_timeout_is_in_seconds(self):
-        from DyberPet.mia_chat import build_mia_chat_bubble
-        bubble = build_mia_chat_bubble('Hmph. Fine, I will stay a bit.', len)
+        from DyberPet.companion_chat import build_companion_chat_bubble
+        bubble = build_companion_chat_bubble('Hmph. Fine, I will stay a bit.', len)
         self.assertGreater(bubble['timeout'], 1)
         self.assertLess(bubble['timeout'], 60)
         pet = (ENGINE / 'DyberPet' / 'DyberPet.py').read_text(encoding='utf-8')
@@ -264,12 +264,12 @@ class ShownSizeGeometry(unittest.TestCase):
 
 class NoBlinkOrEdgeWhileTalking(unittest.TestCase):
     def ticker(self, talking):
-        from DyberPet.mia_director import MiaMicroTicker
+        from DyberPet.companion_director import CompanionMicroTicker
         self.clock = [100.0]
         self.played, self.edges = [], []
         ctx = {'state': 'default', 'at_edge': 'right', 'walking_toward': 'right',
                'available_poses': {'peek', 'climb', 'talk'}}
-        return MiaMicroTicker(get_context=lambda: dict(ctx), play_action=self.played.append,
+        return CompanionMicroTicker(get_context=lambda: dict(ctx), play_action=self.played.append,
                               apply_cursor_flip=lambda flip: None, on_edge=self.edges.append,
                               now_fn=lambda: self.clock[0], rng=random.Random(3),
                               climb_cfg={'enabled': True, 'prob': 1.0}, handle_talk=False,
@@ -293,10 +293,10 @@ class NoBlinkOrEdgeWhileTalking(unittest.TestCase):
         self.assertTrue(self.played)
 
     def test_blinks_when_not_talking(self):
-        from DyberPet.mia_director import MiaMicroTicker
+        from DyberPet.companion_director import CompanionMicroTicker
         clock = [0.0]
         played = []
-        ticker = MiaMicroTicker(get_context=lambda: {'state': 'default'}, play_action=played.append,
+        ticker = CompanionMicroTicker(get_context=lambda: {'state': 'default'}, play_action=played.append,
                                 apply_cursor_flip=lambda flip: None, on_edge=lambda side: None,
                                 now_fn=lambda: clock[0], rng=random.Random(1), handle_talk=False,
                                 is_talking=lambda: False)
@@ -342,22 +342,22 @@ class VoiceSync(unittest.TestCase):
             def __init__(self):
                 self.poses, self.bubbles = [], []
                 self.workers = {'Interaction': Interaction()}
-                self.mia_voice = Voice()
+                self.companion_voice = Voice()
                 self.talk_controller = TalkController(self._play, lambda pose: None, now_fn=clock,
                                                       on_release=self._life_release_line,
                                                       clip_s=clip_seconds)
 
-            def _mia_play_pose(self, pose, **kwargs):
+            def _companion_play_pose(self, pose, **kwargs):
                 self._play(pose)
 
             def _play(self, pose):                      # the engine plays the clip
                 self.poses.append(pose)
                 self.workers['Interaction'].interact, self.workers['Interaction'].act_name = 'animat', pose
 
-            def _mia_show_bubble(self, bubble):
+            def _companion_show_bubble(self, bubble):
                 self.bubbles.append((clock.t, bubble['text']))
 
-            def _mia_log(self, kind, text):
+            def _companion_log(self, kind, text):
                 pass
         return Pet(), clock
 
@@ -372,7 +372,7 @@ class VoiceSync(unittest.TestCase):
     def test_voiced_line_waits_for_the_voice_thinking(self):
         pet, clock = self.stub()
         pet._life_say_line('Hello.', self.bubble(), {'enabled': True})
-        self.assertEqual(pet.mia_voice.spoken, ['Hello.'])
+        self.assertEqual(pet.companion_voice.spoken, ['Hello.'])
         self.assertEqual(pet.bubbles, [], 'the bubble waits for the voice')
         self.tick(pet, clock, 1.2)
         self.assertEqual(pet.poses, ['think'])
@@ -385,7 +385,7 @@ class VoiceSync(unittest.TestCase):
         self.assertTrue(pet.talk_controller.active, 'talks while the voice plays (until 4.2 s)')
         self.tick(pet, clock, 4.4)
         self.assertFalse(pet.talk_controller.active)
-        self.assertEqual(pet.mia_voice.cancelled, 0)
+        self.assertEqual(pet.companion_voice.cancelled, 0)
 
     def test_after_2_5_s_the_line_goes_ahead_without_voice(self):
         from DyberPet.talk_controller import VOICE_WAIT_S
@@ -397,7 +397,7 @@ class VoiceSync(unittest.TestCase):
         self.tick(pet, clock, 2.7)
         self.assertEqual(len(pet.bubbles), 1)
         self.assertAlmostEqual(pet.bubbles[0][0], 2.55, delta=0.16)
-        self.assertEqual(pet.mia_voice.cancelled, 1, 'a voice arriving later would be out of sync')
+        self.assertEqual(pet.companion_voice.cancelled, 1, 'a voice arriving later would be out of sync')
         self.assertEqual(pet.poses[-1], 'talk')
         self.tick(pet, clock, 5.4)
         self.assertTrue(pet.talk_controller.active, 'the bubble time counts from when it shows')
@@ -415,14 +415,14 @@ class VoiceSync(unittest.TestCase):
         pet, clock = self.stub()
         pet._life_say_line('Quiet.', self.bubble('Quiet.'), {'enabled': False})
         self.assertEqual(pet.bubbles, [(0.0, 'Quiet.')])
-        self.assertEqual(pet.mia_voice.spoken, [])
+        self.assertEqual(pet.companion_voice.spoken, [])
         self.tick(pet, clock, 0.15)
         self.assertEqual(pet.poses, ['talk'])
 
     def test_the_emotion_of_a_waiting_line_shows_when_it_starts(self):
         from DyberPet.brain_client import Reply
         pet, clock = self.stub()
-        pet._emit_mia_bubble = lambda text, voice=None, wav=None: pet._life_say_line(text, self.bubble(text), {'enabled': True})
+        pet._emit_companion_bubble = lambda text, voice=None, wav=None: pet._life_say_line(text, self.bubble(text), {'enabled': True})
         pet._conv_show_reply(Reply('chat', 'Hmph.', 'angry', 'angry', 'relay'))
         self.tick(pet, clock, 0.6)
         pet._life_voice_started(9.0)
@@ -437,9 +437,9 @@ class VoiceSync(unittest.TestCase):
 
     def test_pet_window_routes_every_life_line_through_the_wait(self):
         pet = (ENGINE / 'DyberPet' / 'DyberPet.py').read_text(encoding='utf-8')
-        body = pet.split('def _emit_mia_bubble', 1)[1].split('\n    def ', 1)[0]
+        body = pet.split('def _emit_companion_bubble', 1)[1].split('\n    def ', 1)[0]
         self.assertIn('self._life_say_line(text, bubble_dict, voice_cfg, wav=wav if pack_voice else None)', body)
-        self.assertNotIn('register_bubble.emit', body, 'the bubble is shown by _mia_show_bubble only')
+        self.assertNotIn('register_bubble.emit', body, 'the bubble is shown by _companion_show_bubble only')
 
 
 class MouthPauses(unittest.TestCase):
@@ -502,7 +502,7 @@ class MouthPauses(unittest.TestCase):
                 pass
             pet = Pet()
             pet.talk_controller = TalkController(lambda p: None, lambda p: None, now_fn=clock)
-            pet.mia_voice = unittest.mock.Mock(current_wav=str(path))
+            pet.companion_voice = unittest.mock.Mock(current_wav=str(path))
             pet.talk_controller.say(3.0, voiced=True)
             clock.t = 1.0
             pet._life_voice_started(1.6)
@@ -559,7 +559,7 @@ class TwelveFps(unittest.TestCase):
 
     def test_walk_distance_per_frame_is_kept_so_speed_rises_with_the_frame_rate(self):
         from DyberPet.conf import Act
-        from DyberPet.mia_director import frame_period_s
+        from DyberPet.companion_director import frame_period_s
         from DyberPet.modules import frame_step
         walk = Act(images=[], need_move=True, direction='right', frame_move=5.16)
         per_frame = frame_step(walk, scale=0.5)[0]
@@ -654,7 +654,7 @@ class Housekeeping(unittest.TestCase):
 
     def test_voice_wav_is_deleted_after_playback(self):
         qt_app()
-        from DyberPet.mia_voice import MiaVoice
+        from DyberPet.companion_voice import CompanionVoice
 
         class Player:
             def __init__(self):
@@ -674,7 +674,7 @@ class Housekeeping(unittest.TestCase):
             for path in (first, second):
                 write_wav(path, pcm16(('tone', 0.2)))
             player = Player()
-            voice = MiaVoice(engine=None, player=player, tmp_dir=tmp)
+            voice = CompanionVoice(engine=None, player=player, tmp_dir=tmp)
             voice._volume, voice._token = 0.5, 1
             voice._on_synth_done(str(first), 1)
             self.assertEqual(voice.current_wav, str(first))
@@ -695,7 +695,7 @@ class Housekeeping(unittest.TestCase):
 
     def test_stale_wavs_are_swept_at_start(self):
         qt_app()
-        from DyberPet.mia_voice import STALE_WAV_S, MiaVoice
+        from DyberPet.companion_voice import STALE_WAV_S, CompanionVoice
         self.assertEqual(STALE_WAV_S, 3600)
         with tempfile.TemporaryDirectory() as tmp:
             old, fresh, other = Path(tmp) / 'voice-old.wav', Path(tmp) / 'voice-new.wav', Path(tmp) / 'note.txt'
@@ -704,14 +704,14 @@ class Housekeeping(unittest.TestCase):
             two_hours_ago = time.time() - 7200
             os.utime(old, (two_hours_ago, two_hours_ago))
             os.utime(other, (two_hours_ago, two_hours_ago))
-            MiaVoice(engine=None, player=unittest.mock.Mock(), tmp_dir=tmp)
+            CompanionVoice(engine=None, player=unittest.mock.Mock(), tmp_dir=tmp)
             self.assertEqual(sorted(p.name for p in Path(tmp).iterdir()), ['note.txt', 'voice-new.wav'])
 
     def test_climb_is_shorter(self):
         """Hold at the top halved (5-20 s -> 2.5-10 s), also in her bundled profile; on the owner's
         screen (1280 x 800 logical at 150 %, her default size shown at 1/1.5) the broom ride up
         the highest wall takes 12 s or less."""
-        from DyberPet.mia_director import (CLIMB_HOLD_RANGE_S, DEFAULT_CLIMB_CFG, ClimbSession,
+        from DyberPet.companion_director import (CLIMB_HOLD_RANGE_S, DEFAULT_CLIMB_CFG, ClimbSession,
                                            climb_speed_px_s, load_climb_config)
         self.assertEqual(CLIMB_HOLD_RANGE_S, (2.5, 10.0))
         self.assertEqual(DEFAULT_CLIMB_CFG['hold_s'], [2.5, 10.0])
@@ -737,7 +737,7 @@ class Housekeeping(unittest.TestCase):
 
     def test_climb_toggle_writes_only_the_choice(self):
         pet = (ENGINE / 'DyberPet' / 'DyberPet.py').read_text(encoding='utf-8')
-        body = pet.split('def _toggle_mia_climb', 1)[1].split('\n    def ', 1)[0]
+        body = pet.split('def _toggle_companion_climb', 1)[1].split('\n    def ', 1)[0]
         self.assertIn('user_climb["enabled"] = bool(checked)', body)
         self.assertIn('data["climb"] = user_climb', body)
 

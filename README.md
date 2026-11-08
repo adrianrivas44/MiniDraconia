@@ -2,7 +2,7 @@
 
 A small Windows desktop companion with an expressive character who walks, climbs on her broom, reacts to touch and talks: offline lines by default, or your own AI if you connect one. Built on [DyberPet](https://github.com/ChaozhongLiu/DyberPet).
 
-**Release candidate 1.0.0-rc.2, the latest prerelease. Experimental, not a stable release.**
+**Release candidate 1.0.0-rc.3, the latest prerelease. Experimental, not a stable release.**
 
 [Español](README.es.md) · [Contribute](CONTRIBUTING.md) · [Character & visual guide](docs/identity/README.md) · [Connect your own AI](docs/CONNECT-YOUR-AI.md) · [Recommended setup & tests](docs/RECOMMENDED-SETUP.md) · [Privacy](docs/PRIVACY.md) · [Roadmap](docs/ROADMAP.md)
 
@@ -17,7 +17,8 @@ MiniDraconia started as a personal project. This is my first public software pro
 ## What this version does
 
 - Displays an animated desktop companion, crisp at the screen's scaling, who walks across the screen (and looks where she goes), follows the cursor, climbs the screen edges on her broom, sits, reads and sips her tea.
-- New in 1.0.0-rc.2: three animations of her own (**mirror**, **quill** and **yawn**: she yawns before she dozes off), and her own app icon for the executable, her window, the tray and Settings.
+- Since 1.0.0-rc.2: three animations of her own (**mirror**, **quill** and **yawn**: she yawns before she dozes off), and her own app icon for the executable, her window, the tray and Settings.
+- New in 1.0.0-rc.3: a model server on your own computer works as fast with `localhost` as with `127.0.0.1`, gets time to load its model (the app warms it up in the background, and she keeps thinking while a slow reply is on its way), and stray `assistant>` prefixes or broken emotion tags from smaller models no longer reach her bubble.
 - Reacts to touch zones and dragging. She visibly talks while a line is on screen.
 - Talks in English: offline lines by default, your own AI if you connect one, or a self-hosted relay (see below). Type to her from her menu (“Talk to Draconia”).
 - Supports an optional voice pack that anyone can record for her stored lines ([voice pack](docs/VOICE-PACK.md)); none is included.
@@ -43,7 +44,7 @@ See [privacy](docs/PRIVACY.md) for the details.
 
 ## Run the Windows build
 
-Use the Windows ZIP attached to the [latest prerelease](https://github.com/adrianrivas44/MiniDraconia/releases) (1.0.0-rc.2)—not the automatically generated source-code ZIP. This is an experimental community candidate, not a stable or security-certified release.
+Use the Windows ZIP attached to the [latest prerelease](https://github.com/adrianrivas44/MiniDraconia/releases) (1.0.0-rc.3)—not the automatically generated source-code ZIP. This is an experimental community candidate, not a stable or security-certified release.
 
 1. Extract the **entire** ZIP into an ordinary folder.
 2. Open `MiniDraconia/MiniDraconia.exe`. Keep `_internal` beside the executable; it is required.

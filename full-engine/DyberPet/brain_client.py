@@ -37,6 +37,17 @@ Contract:
   - Each remote request has a timeout and at most two attempts; only a timeout, a network
     error or a 5xx answer is tried again.
   - The relay token and the API key are never logged, printed or put in an error text.
+
+A server on this computer (D2.5):
+  - A base URL whose host is exactly `localhost` connects to 127.0.0.1 (scheme, port and path
+    kept): on Windows `localhost` tries IPv6 ::1 first, and a server listening on IPv4 only
+    then answered about 2 s late. When the IPv4 connection is refused, [::1] is tried once.
+    The saved preference keeps what the user typed.
+  - A local endpoint waits up to LOCAL_CHAT_TIMEOUT_S (chat and Test connection): the first
+    request after the server starts loads the model. Hosted endpoints keep CHAT_TIMEOUT_S.
+  - `warm_up_own_ai` sends one tiny request (the Test connection request) to a local endpoint
+    only, at app start and when Settings are saved, on a background thread. It never counts
+    toward the daily limit, is skipped when that limit is 0, and a failure is only logged.
 Standard library only.
 """
 from __future__ import annotations
@@ -67,6 +78,7 @@ MODE_RELAY, MODE_OWN_KEY, MODE_OFFLINE = 'relay', 'own_key', 'offline'
 
 RELAY_CONFIG_NAME = 'minidraconia_relay.json'
 CHAT_TIMEOUT_S = 20
+LOCAL_CHAT_TIMEOUT_S = 90       # a server on this computer may first have to load the model
 TTS_TIMEOUT_S = 30
 HEALTH_TIMEOUT_S = 5
 ATTEMPTS = 2                    # a timeout, network error or 5xx is tried once more
@@ -88,6 +100,10 @@ PLACEHOLDER_BASE_URL = 'https://your-endpoint.example/v1'
 PLACEHOLDER_MODEL = 'provider/model-name'
 # A server on this computer (e.g. a local OpenAI-compatible server) may be used without a key.
 LOCAL_HOSTS = ('localhost', '127.0.0.1', '::1')
+# The example address shown for a server on this computer (IPv4: fast on Windows too).
+LOCAL_EXAMPLE_URL = 'http://127.0.0.1:11434/v1'
+TEST_PROMPT = 'Reply with the single word OK.'
+TEST_MAX_TOKENS = 5
 DEFAULT_DAILY_CAP = 200
 OWN_KEY_MAX_TOKENS = 140
 # The per-turn rule sent after the conversation (the character prompt says the rest).
@@ -131,24 +147,45 @@ def emotion_to_pose(emotion) -> str:
 # Replies: emotion tag and voice cues
 # ---------------------------------------------------------------------------
 
-_TAG = re.compile(r'^\s*\[\s*([A-Za-z]+)\s*\]\s*')
+# The leading emotion tag, also when a weaker model breaks it: `[happy]`, `[ bored ]`,
+# `[]bored]`, `[[thinking]]`, `[bored]]`, or an empty `[]`.
+_TAG = re.compile(r'^\s*\[[\[\]\s]*([A-Za-z]*)\s*\]+\s*')
+# A role prefix some models write before (or after) the tag: `assistant`, `assistant:`,
+# `assistant>`, `Draconia:`, also repeated or with stray marks (`assistantassistant *)`,
+# `assistant)`, seen from a 3B model on Windows). A bare `assistant` counts only when a line
+# break, the end or a tag follows it, so ordinary text such as "Assistant managers bore me." is kept.
+_ROLE = re.compile(r'^\s*(?:assistant|draconia)+(?:\s*[:>)*(]+[\s:>)*(]*|\s*\n\s*|\s*(?=\[)|\s*$)',
+                   re.IGNORECASE)
+_EMPTY_BRACKETS = re.compile(r'\[\s*\]')
 _INLINE_CUE = re.compile(r'\[\s*[A-Za-z][A-Za-z _-]{0,20}\]')
 _WRAP_CUE = re.compile(r'</?\s*(soft|emphasis|whisper)\s*>', re.IGNORECASE)
 
 
+def _strip_role(text: str) -> str:
+    for _ in range(3):
+        match = _ROLE.match(text)
+        if not match:
+            break
+        text = text[match.end():]
+    return text
+
+
 def parse_reply(text) -> tuple:
-    """(emotion, bubble text) of a model reply: the leading emotion tag is taken off (unknown or
-    missing -> 'neutral'), and voice cues ([sigh], <soft>...</soft>) never reach the bubble."""
-    text = str(text or '')
+    """(emotion, bubble text) of a model reply: a role prefix (assistant, assistant:, assistant>,
+    Draconia:) before or after the leading emotion tag is taken off, and so is the tag, even when
+    malformed (`[]bored]`); an unknown or missing emotion -> 'neutral'. Voice cues ([sigh],
+    <soft>...</soft>) and bracket junk never reach the bubble."""
+    text = _strip_role(str(text or ''))
     emotion = 'neutral'
     match = _TAG.match(text)
     if match:
         word = match.group(1).lower()
         if word in EMOTIONS:
             emotion = word
-        text = text[match.end():]
+        text = _strip_role(text[match.end():])
     text = _WRAP_CUE.sub('', text)
     text = _INLINE_CUE.sub('', text)
+    text = _EMPTY_BRACKETS.sub('', text)
     text = ' '.join(text.split())
     text = re.sub(r'\s+([,.;:!?])', r'\1', text)
     return emotion, text[:LINE_LIMIT].strip()
@@ -246,6 +283,29 @@ def is_local_url(url) -> bool:
     return host.lower() in LOCAL_HOSTS
 
 
+def connect_url(url, host: str = '127.0.0.1') -> str:
+    """The address actually connected to: a host that is exactly `localhost` becomes `host`
+    (127.0.0.1, or [::1] for the fallback), keeping scheme, port, path and query. Anything else
+    is returned unchanged."""
+    url = str(url or '')
+    try:
+        parts = urllib.parse.urlsplit(url)
+        if (parts.hostname or '').lower() != 'localhost':
+            return url
+        port = parts.port
+    except ValueError:
+        return url
+    netloc = host if port is None else '%s:%d' % (host, port)
+    if '@' in parts.netloc:
+        netloc = parts.netloc.rsplit('@', 1)[0] + '@' + netloc
+    return urllib.parse.urlunsplit(parts._replace(netloc=netloc))
+
+
+def chat_timeout(url) -> float:
+    """A server on this computer may first load its model: it is given LOCAL_CHAT_TIMEOUT_S."""
+    return LOCAL_CHAT_TIMEOUT_S if is_local_url(url) else CHAT_TIMEOUT_S
+
+
 def own_key_problem(base_url, api_key, model) -> Optional[str]:
     """Why these own-AI settings cannot be used, in plain words; None when they can.
 
@@ -262,7 +322,8 @@ def own_key_problem(base_url, api_key, model) -> Optional[str]:
         return None
     if urllib.parse.urlsplit(base_url).scheme != 'https':
         return ('Refused: an API key is never sent over plain http:// to another computer. '
-                'Use the https:// address, or a server on this computer (localhost).')
+                'Use the https:// address, or a server on this computer such as %s.'
+                % LOCAL_EXAMPLE_URL)
     if not str(api_key or '').strip():
         return ('Enter an API key first. Only a server on this computer (localhost, 127.0.0.1 '
                 'or ::1) can be used without one.')
@@ -530,7 +591,8 @@ class OwnKeyClient:
     def __repr__(self):  # never print the key
         return 'OwnKeyClient(%r, %r)' % (self.base_url, self.model)
 
-    def _request(self, payload: dict) -> urllib.request.Request:
+    def _request(self, payload: dict, host: str = '127.0.0.1') -> urllib.request.Request:
+        """The request to `<base_url>/chat/completions`; a `localhost` base URL goes to `host`."""
         if self._key and not is_local_url(self.base_url) and \
                 urllib.parse.urlsplit(self.base_url).scheme != 'https':
             raise BrainError('insecure', 'key over plain http')   # never sent, never retried
@@ -538,17 +600,32 @@ class OwnKeyClient:
         if self._key:                       # a local server may need no key
             headers['Authorization'] = 'Bearer ' + self._key
         return urllib.request.Request(
-            self.base_url + '/chat/completions', data=json.dumps(payload).encode('utf-8'), method='POST',
-            headers=headers)
+            connect_url(self.base_url, host) + '/chat/completions', data=json.dumps(payload).encode('utf-8'),
+            method='POST', headers=headers)
 
     def payload(self, messages: list, max_tokens: int = OWN_KEY_MAX_TOKENS) -> dict:
         return {'model': self.model, 'messages': messages, 'max_tokens': int(max_tokens),
                 'reasoning': {'enabled': False}}
 
+    def _exchange(self, payload: dict) -> Callable[[], bytes]:
+        """One attempt: `localhost` is tried over IPv4 (127.0.0.1) and, only if that connection
+        is refused, once over IPv6 ([::1])."""
+        request = self._request(payload)
+        timeout = chat_timeout(self.base_url)
+        fallback = self._request(payload, '[::1]') if connect_url(self.base_url) != self.base_url else None
+
+        def call() -> bytes:
+            try:
+                return _send(self._transport, request, timeout, MAX_CHAT_BYTES)
+            except BrainError as exc:
+                if fallback is None or exc.kind != 'network' or exc.detail != 'ConnectionRefusedError':
+                    raise
+            return _send(self._transport, fallback, timeout, MAX_CHAT_BYTES)
+        return call
+
     def complete(self, messages: list, max_tokens: int = OWN_KEY_MAX_TOKENS,
-                 before: Optional[Callable[[], None]] = None) -> str:
-        request = self._request(self.payload(messages, max_tokens))
-        body = with_attempts(lambda: _send(self._transport, request, CHAT_TIMEOUT_S, MAX_CHAT_BYTES),
+                 before: Optional[Callable[[], None]] = None, attempts: int = ATTEMPTS) -> str:
+        body = with_attempts(self._exchange(self.payload(messages, max_tokens)), attempts=attempts,
                              sleep=self._sleep, before=before)
         try:
             data = json.loads(body.decode('utf-8'))
@@ -561,9 +638,33 @@ class OwnKeyClient:
             raise BrainError('malformed', 'empty message')
         return content
 
-    def test(self) -> None:
+    def test(self, attempts: int = ATTEMPTS) -> None:
         """One tiny request; raises BrainError (kind and HTTP status only) when it fails."""
-        self.complete([{'role': 'user', 'content': 'Reply with the single word OK.'}], max_tokens=5)
+        self.complete([{'role': 'user', 'content': TEST_PROMPT}], max_tokens=TEST_MAX_TOKENS,
+                      attempts=attempts)
+
+
+def warm_up_own_ai(settings, transport=None) -> Optional[str]:
+    """Load the model of a server on this computer before the first typed message.
+
+    One request shaped like Test connection, one attempt, LOCAL_CHAT_TIMEOUT_S. Only for usable
+    own-AI settings whose endpoint is local; never to another computer, never when the daily
+    limit is 0, never counted. Returns None when nothing was sent, 'ok', or the failure kind
+    (for the log; it never raises)."""
+    try:
+        if not isinstance(settings, dict):
+            return None
+        base_url, api_key, model = settings.get('base_url'), settings.get('api_key') or '', settings.get('model')
+        if own_key_problem(base_url, api_key, model) is not None or not is_local_url(base_url):
+            return None
+        if int(settings.get('daily_cap', DEFAULT_DAILY_CAP)) <= 0:
+            return None
+        OwnKeyClient(base_url, api_key, model, transport, sleep=lambda s: None).test(attempts=1)
+        return 'ok'
+    except BrainError as exc:
+        return exc.kind
+    except Exception as exc:  # never let a warm-up break anything
+        return type(exc).__name__
 
 
 def own_key_messages(prompt: str, history=(), text: str = '') -> list:
@@ -737,6 +838,23 @@ class ConversationBrain:
             return self.offline_reply('chat', type(exc).__name__)
         return Reply('chat', data['text'], data['emotion'], emotion_to_pose(data['emotion']), source)
 
+    def waits_on_local_server(self) -> bool:
+        """True when typed chat goes to your own AI on this computer (it may be loading a model)."""
+        if self._relay() is not None:
+            return False
+        own = self._own_key()
+        return own is not None and is_local_url(own['base_url'])
+
+    def warm_up(self) -> Optional[str]:
+        """warm_up_own_ai for the active mode: only your own AI on this computer (never a relay,
+        offline or another computer). Never counted toward the daily limit; never raises."""
+        try:
+            if not self.waits_on_local_server():
+                return None
+            return warm_up_own_ai(self._own_key(), self._transport)
+        except Exception as exc:
+            return type(exc).__name__
+
     def check_relay(self) -> Optional[bool]:
         """GET /v1/health of the relay (None when there is no relay); only logged."""
         relay = self._relay()
@@ -764,7 +882,7 @@ def test_own_key(base_url: str, api_key: str, model: str, transport=None) -> tup
 
 
 # ---------------------------------------------------------------------------
-# Relay voice: same contract as mia_voice.KokoroEngine.synth()
+# Relay voice: same contract as companion_voice.KokoroEngine.synth()
 # ---------------------------------------------------------------------------
 
 class RelayVoiceEngine:

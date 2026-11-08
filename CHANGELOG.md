@@ -1,6 +1,30 @@
 # Changelog
 
-## 1.0.0-rc.2 — second community prerelease
+## 1.0.0-rc.3 — third community prerelease
+
+What a real test with a local server on Windows exposed in rc.2 (Ollama, no key; see `docs/RECOMMENDED-SETUP.md`), now fixed in the app.
+
+### A server on your own computer is fast
+- A base URL whose host is exactly `localhost` now connects to `127.0.0.1`, keeping the scheme, port and path. On Windows `localhost` tried IPv6 `::1` first and a server listening on IPv4 only answered about 2 s late on every reply. If the IPv4 connection is refused, she tries `[::1]` once, so a server that listens on IPv6 only still works. What you typed is what stays saved.
+- The Settings hint and the plain-language messages show `http://127.0.0.1:11434/v1`.
+
+### Cold start of a local model
+- A server on your own computer (`localhost`, `127.0.0.1`, `::1`) now gets up to 90 s per request, for typed chat and for *Test connection*: the first request after the server starts has to load the model. Hosted endpoints keep 20 s.
+- Warm-up: when your own AI is on your own computer, the app sends one tiny request (the same one as *Test connection*) at start and when you save the settings, in the background. It never counts toward the daily limit, is never sent to another computer, is skipped when the daily limit is 0, and a failure is only written to the local log.
+- *Test connection* runs in the background, so Settings never freezes while a model loads.
+- While a typed message waits on a server on your own computer for more than about 3 s, she keeps her thinking pose until the reply arrives.
+
+### Clean replies from weaker models
+- A role prefix before or after the emotion tag (`assistant`, `assistant:`, `assistant>`, `Draconia:`, any case) never reaches the bubble.
+- A broken leading tag such as `[]bored]` or `[ bored ]` still sets her pose when the word inside is one of her emotions; otherwise she is neutral. The bracket junk never reaches the bubble.
+
+### Tests and docs
+- `tests/test_live_endpoints.py`: an opt-in live test against your own local server (Test connection, the mode, the warm-up, one typed chat, the daily count), skipped unless `MINIDRACONIA_LIVE_LOCAL_URL` and `MINIDRACONIA_LIVE_LOCAL_MODEL` are set; no key is used. See `docs/DEVELOPMENT.md`.
+- The version tests follow `VERSION` instead of repeating a literal.
+- `docs/KNOWN-ISSUES.md` drops the `localhost` and cold-start items; `docs/CONNECT-YOUR-AI.md` and `docs/RECOMMENDED-SETUP.md` say what changed and keep the rc.2 measurements, labelled as such. No new dependencies.
+- Internal module and log names no longer carry an earlier project's character name (`talk.log` replaces the old log file name).
+
+## 1.0.0-rc.2 — second community prerelease (published 2026-11-07)
 
 ### She is alive
 - Crisp frames at the screen's scaling: each frame is built at the exact physical size for the display (never upscaled), decoded per clip on demand with background prefetch, a few clips kept warm and a memory budget.

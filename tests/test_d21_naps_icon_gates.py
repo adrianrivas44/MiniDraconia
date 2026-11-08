@@ -52,7 +52,7 @@ class Clock:
 
 
 def her_config():
-    from DyberPet.mia_director import load_director_config
+    from DyberPet.companion_director import load_director_config
     data = json.loads(BRAIN.read_text(encoding='utf-8'))
     return load_director_config(BRAIN)['weights'], tuple(data['director_tick_s'])
 
@@ -61,9 +61,9 @@ def make_director(clock, weights=None, seed=1, tick=(5.0, 8.0), log=None, system
     """Her director with the role's idle pool. `system_idle` 1 s: someone is using the PC, so the
     away sleep stays out of the way unless a test asks for it."""
     qt_app()
-    from DyberPet.mia_director import MiaDirector
+    from DyberPet.companion_director import CompanionDirector
     played = []
-    director = MiaDirector(get_available_poses=lambda: set(POSES), play_action=played.append,
+    director = CompanionDirector(get_available_poses=lambda: set(POSES), play_action=played.append,
                            is_busy=lambda: False, weights=weights or her_config()[0], rng=random.Random(seed),
                            system_idle_fn=system_idle, now_fn=clock, tick_range_s=tick, idle_pool=dict(POOL),
                            on_log=log, **kwargs)
@@ -142,7 +142,7 @@ class NoEarlyNaps(unittest.TestCase):
                 self.assertLess(mean, 1.2 * 600.0, 'the cap is the binding limit here')
 
     def test_the_documented_expected_interval(self):
-        from DyberPet.mia_director import cap_nap_weight, expected_nap_interval_s, mood_weighted_choice
+        from DyberPet.companion_director import cap_nap_weight, expected_nap_interval_s, mood_weighted_choice
         weights, tick = her_config()
         self.assertAlmostEqual(expected_nap_interval_s(weights, tick), 600.0, places=3)
         # Without the cap her weight alone would mean a nap every ~6.6 minutes of 5-8 s ticks.
@@ -208,7 +208,7 @@ class DirectorLog(unittest.TestCase):
         self.assertTrue(all(45 <= s <= 120 for s in nap_seconds))
 
     def test_rate_safe_even_with_fast_ticks(self):
-        from DyberPet.mia_director import RateLimitedLog
+        from DyberPet.companion_director import RateLimitedLog
         sink, clock = [], Clock(0.0)
         limited = RateLimitedLog(sink.append, clock, max_lines=20, window_s=60.0)
         for _ in range(100):
@@ -227,16 +227,16 @@ class DirectorLog(unittest.TestCase):
         self.assertEqual(len(log), 20)
 
     def test_talk_log_lines_are_timestamped_and_the_log_rolls_over(self):
-        from DyberPet.mia_director import append_talk_log
+        from DyberPet.companion_director import append_talk_log
         folder = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, folder, True)
-        path = folder / 'mia_talk.log'
+        path = folder / 'talk.log'
         append_talk_log(path, 'director', 'nap 73')
         self.assertRegex(path.read_text(encoding='utf-8'), r'^\d\d:\d\d:\d\d director nap 73\n$')
         for _ in range(50):
             append_talk_log(path, 'director', 'act tea', max_bytes=200)
         self.assertLessEqual(path.stat().st_size, 200 + 40)
-        self.assertTrue((folder / 'mia_talk.log.1').is_file())
+        self.assertTrue((folder / 'talk.log.1').is_file())
         append_talk_log(folder / 'missing' / 'deep' / 'x.log', 'director', 'wake')   # never raises
 
     def test_the_pet_writes_director_lines_to_its_talk_log(self):
@@ -259,9 +259,9 @@ base = tempfile.mkdtemp()
 os.makedirs(os.path.join(base, 'data'))
 settings.CONFIGDIR = base
 class Pet:
-    _mia_log = PetWidget._mia_log
-Pet()._mia_log('director', 'walk left')
-print(json.dumps({'log': open(os.path.join(base, 'data', 'mia_talk.log'), encoding='utf-8').read()}))
+    _companion_log = PetWidget._companion_log
+Pet()._companion_log('director', 'walk left')
+print(json.dumps({'log': open(os.path.join(base, 'data', 'talk.log'), encoding='utf-8').read()}))
 '''
         env = dict(os.environ, QT_QPA_PLATFORM='offscreen',
                    PYTHONPATH=str(ENGINE) + os.pathsep + os.environ.get('PYTHONPATH', ''))
@@ -361,8 +361,11 @@ class AppIconAndVersionInfo(unittest.TestCase):
         self.assertEqual(Path(exe['icon']), ENGINE / 'res' / 'icons' / 'app.ico')
         self.assertTrue(Path(exe['version']).is_relative_to(self.work), 'written to the build folder, not the tree')
         filevers, prodvers, strings = read_version_file(exe['version'])
-        self.assertEqual(filevers, (1, 0, 0, 2))
-        self.assertEqual(prodvers, (1, 0, 0, 2))
+        # REVISED (D2.5): follows VERSION (1.0.0-rc.N -> (1, 0, 0, N)) instead of a literal.
+        expected = load('version_info_d25', ENGINE / 'packaging' / 'version_info.py').numeric_version(self.version)
+        self.assertEqual(expected[:3], tuple(int(part) for part in self.version.split('-')[0].split('.')))
+        self.assertEqual(filevers, expected)
+        self.assertEqual(prodvers, expected)
         self.assertEqual(strings['OriginalFilename'], 'MiniDraconia.exe')
 
     def test_the_gate_fails_without_icon_or_version_info(self):

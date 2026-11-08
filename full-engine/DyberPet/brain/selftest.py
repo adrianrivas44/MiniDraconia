@@ -24,7 +24,7 @@ def exercise():
         raise AssertionError('network forbidden')
     with patch.object(socket, 'socket', denied):
         from DyberPet.brain import Brain, load_config
-        from DyberPet.mia_chat import ChatBox, ChatHistory
+        from DyberPet.companion_chat import ChatBox, ChatHistory
         box = ChatBox()
         sent = []
         box.message_sent.connect(sent.append)
@@ -44,23 +44,23 @@ def exercise():
             def __init__(self):
                 super().__init__()
                 self.bubbles = []
-                self.mia_chat_history = ChatHistory()
-            def _mia_play_pose(self, pose, **kwargs):
+                self.companion_chat_history = ChatHistory()
+            def _companion_play_pose(self, pose, **kwargs):
                 pass
             def _life_begin_talk(self, pose):
                 pass
-            def _mia_log(self, kind, text):
+            def _companion_log(self, kind, text):
                 pass
-            def _mia_note_mood_event(self, kind, **meta):
+            def _companion_note_mood_event(self, kind, **meta):
                 pass
-            def _emit_mia_bubble(self, text, voice=None, wav=None):
+            def _emit_companion_bubble(self, text, voice=None, wav=None):
                 assert not voice, 'an offline line is never voiced by the relay'
                 self.bubbles.append(text)
         pet = Receiver()
         pet._conv_setup(brain=_offline_brain())
-        PetWidget._send_mia_greeting(pet)
+        PetWidget._send_companion_greeting(pet)
         pet._conv_chat(sent[0])
-        PetWidget._send_mia_bye(pet)
+        PetWidget._send_companion_bye(pet)
         assert len(pet.bubbles) == 3, pet.bubbles
         assert pet._conv_calls.pending() == 0, 'offline never starts a background call'
         from DyberPet.DyberSettings.AIPrivacyUI import AIPrivacyInterface
@@ -109,11 +109,11 @@ def exercise_product():
         pet.workers["Interaction"].sig_move_inter.connect(pet._move_customized)
         pet.threads = {key: QThread() for key in pet.workers}
         bubbles = []
-        original_show = pet._mia_show_bubble
+        original_show = pet._companion_show_bubble
         def record_bubble(bubble_dict):
             bubbles.append(bubble_dict.get('message', ''))
             original_show(bubble_dict)
-        pet._mia_show_bubble = record_bubble
+        pet._companion_show_bubble = record_bubble
         plays = []
         def record_play(*args):
             plays.append(args)
@@ -139,7 +139,7 @@ def exercise_product():
         assert persisted['volume'] == 0.4, persisted
         settings.onfloor = 1; settings.draging = 0
         zones = []
-        from DyberPet.mia_director import detect_touch_zone
+        from DyberPet.companion_director import detect_touch_zone
         for zone in ['head', 'cheek', 'body']:
             candidates = [QPoint(x,y) for y in range(0,pet.label.height(),max(1,pet.label.height()//20)) for x in range(0,pet.label.width(),max(1,pet.label.width()//20)) if detect_touch_zone(pet.label.width(),pet.label.height(),x,y)==zone]
             assert candidates, zone
@@ -162,7 +162,7 @@ def exercise_product():
         controller.is_playing=original_busy
         recent=[]
         for n in range(8):
-            controller.react('body', available=pet._mia_available_poses(), now=100+n*10, muted=True)
+            controller.react('body', available=pet._companion_available_poses(), now=100+n*10, muted=True)
             assert bubbles[-1] not in recent, 'offline line repeated one of the last three'
             recent=(recent+[bubbles[-1]])[-3:]
         before=len(bubbles)
@@ -178,11 +178,11 @@ def exercise_product():
         assert pet.pet_conf.fall is pet.pet_conf.act_dict['climb']
         # Typed chat opens and is answered from the offline lines (no network).
         pet.is_follow_mouse=False; settings.draging=0; settings.onfloor=1
-        pet._open_mia_chat()
-        assert pet.mia_chat_box is not None and pet.mia_chat_box.isVisible()
+        pet._open_companion_chat()
+        assert pet.companion_chat_box is not None and pet.companion_chat_box.isVisible()
         before=len(bubbles)
-        pet.mia_chat_box.setText('hello')
-        QTest.keyClick(pet.mia_chat_box, Qt.Key_Return)
+        pet.companion_chat_box.setText('hello')
+        QTest.keyClick(pet.companion_chat_box, Qt.Key_Return)
         app.processEvents()
         chat_bubbles=len(bubbles)-before
         assert chat_bubbles==1, chat_bubbles

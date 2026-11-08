@@ -1,4 +1,4 @@
-"""Animo de Mia con continuidad (contrato mia-mood, pedido de User 2026-10-25).
+"""Animo de la mascota con continuidad (pedido de User 2026-10-25).
 
 Modulo puro, sin Qt, con reloj inyectable (`now_fn`) para que todo sea
 testeable con `pytest` sin abrir la app y sin llamadas de red.
@@ -9,9 +9,9 @@ ausencia/regreso de User...) mueven los ejes; `decay()` los acerca a una
 base por minuto transcurrido (energy sigue un ciclo circadiano en vez de
 una base fija). De los ejes se deriva una emocion dominante.
 
-No toca local_brain.py / mia_chat.py / mia_proxy.py / run_DyberPet.py (en
-paralelo corre el contrato del cerebro remoto). Para pedir frases al LLM se
-sigue usando la API que ya existe en DyberPet.py (`_mia_ask`).
+No toca local_brain.py / companion_chat.py / run_DyberPet.py (en paralelo
+corria el trabajo del cerebro remoto). Para pedir frases al LLM se
+sigue usando la API que ya existe en DyberPet.py (`_companion_ask`).
 """
 from __future__ import annotations
 

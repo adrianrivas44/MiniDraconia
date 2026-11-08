@@ -18,12 +18,19 @@ pose from the reaction manifest and gates lines by its cooldown. The line itself
     copy with a relay never mixes two voices);
   - otherwise her stored line for that event key.
 
-Pet attributes used: _conv_brain, _conv_calls, mia_chat_history, _emit_mia_bubble(text, voice, wav),
-_mia_play_pose(pose), _mia_note_mood_event(kind, **meta), _mia_log(kind, text), and when
-present talk_controller, pet_conf, _draconia_reactions.
+D2.5, your own AI on this computer (a local server may first have to load its model):
+  - at start, one tiny background warm-up request loads it (never counted; a failure is only
+    logged as `warmup <kind>`);
+  - while a typed message waits on it for more than THINKING_AFTER_S, she keeps her `think`
+    pose (the clip is replayed when it ends, never restarted mid-way) until the reply arrives.
+
+Pet attributes used: _conv_brain, _conv_calls, companion_chat_history, _emit_companion_bubble(text, voice, wav),
+_companion_play_pose(pose), _companion_note_mood_event(kind, **meta), _companion_log(kind, text), and when
+present talk_controller, pet_conf, _draconia_reactions, workers.
 """
 import logging
 import os
+import time
 from typing import Optional
 
 import DyberPet.settings as settings
@@ -33,6 +40,10 @@ REACTION_EVENT_KEYS = {'head': 'pat', 'cheek': 'pinch', 'body': 'touch_body', 'd
 
 
 class ConversationMixin:
+    THINKING_AFTER_S = 3.0      # a typed message waiting longer than this on a local server
+    THINKING_CHECK_S = 1.0      # ... is checked this often while it still waits
+    THINKING_MAX_S = 200.0      # safety bound: two attempts of LOCAL_CHAT_TIMEOUT_S and margin
+
     # --- setup ------------------------------------------------------------------------------
     def _conv_setup(self, brain=None) -> None:
         """Create the brain once per pet load; a self-hosted relay is health-checked in the
@@ -49,11 +60,19 @@ class ConversationMixin:
         self._conv_bye_shown = False
         try:
             mode = brain.mode()
-            self._mia_log('mode', mode)
+            self._companion_log('mode', mode)
             if mode == 'relay':
-                self._conv_calls.submit(brain.check_relay, lambda ok: self._mia_log('relay', 'health %s' % ok))
+                self._conv_calls.submit(brain.check_relay, lambda ok: self._companion_log('relay', 'health %s' % ok))
+            elif mode == 'own_key' and brain.waits_on_local_server():
+                self._conv_calls.submit(brain.warm_up,
+                                        lambda result: self._companion_log('warmup', str(result or 'skipped')))
         except Exception:
             logging.getLogger(__name__).exception('_conv_setup failed (ignored)')
+
+    def _conv_later(self, seconds: float, fn) -> None:
+        """Run `fn` on the UI thread after `seconds` (a Qt single-shot timer)."""
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(int(seconds * 1000), fn)
 
     def _conv_mode(self) -> str:
         brain = getattr(self, '_conv_brain', None)
@@ -78,7 +97,7 @@ class ConversationMixin:
         try:
             brain = self._conv_brain
             if brain.plan(key) == 'skip':
-                self._mia_log('line', 'skip ' + key)
+                self._companion_log('line', 'skip ' + key)
             else:
                 self._conv_show_reply(brain.offline_reply(key))
         except Exception:
@@ -98,31 +117,66 @@ class ConversationMixin:
         relay = reply.source == 'relay'
         # A notice changes the bubble text, so the recorded line would not match it: unvoiced.
         wav = getattr(reply, 'wav', None) if not relay and not notice and voice is not False else None
-        self._mia_log('line', '%s %s %s %s%s' % (reply.source, reply.key, reply.emotion, reply.error or '',
+        self._companion_log('line', '%s %s %s %s%s' % (reply.source, reply.key, reply.emotion, reply.error or '',
                                                  ' stored-voice' if wav else ''))
         text = reply.text if not notice else '%s %s' % (notice, reply.text)
-        self._emit_mia_bubble(text, voice=relay if voice is None else voice, wav=wav)
+        self._emit_companion_bubble(text, voice=relay if voice is None else voice, wav=wav)
         self._life_begin_talk(pose)
 
     # --- typed chat -------------------------------------------------------------------------
     def _conv_chat(self, text: str) -> None:
-        self._mia_play_pose('think')
+        self._companion_play_pose('think')
         brain = self._conv_brain
         if brain.plan('chat') != 'remote':
             self._conv_on_chat_reply(text, brain.offline_or_cap_reply('chat'))
             return
-        history = self.mia_chat_history.as_list()
+        history = self.companion_chat_history.as_list()
+        waiting = object()
+        self._conv_waiting = waiting
+        try:
+            if brain.waits_on_local_server():
+                self._conv_wait_started = time.monotonic()
+                self._conv_later(self.THINKING_AFTER_S, lambda: self._conv_keep_thinking(waiting))
+        except Exception:
+            logging.getLogger(__name__).exception('thinking timer failed (ignored)')
         self._conv_calls.submit(lambda: brain.remote_chat(text, history),
-                                lambda reply: self._conv_on_chat_reply(text, reply))
+                                lambda reply: self._conv_on_chat_reply(text, reply, waiting))
 
-    def _conv_on_chat_reply(self, user_text: str, reply) -> None:
+    def _conv_thinking_now(self) -> bool:
+        """She is playing her think clip right now."""
+        interaction = (getattr(self, 'workers', None) or {}).get('Interaction')
+        return getattr(interaction, 'interact', None) is not None and \
+            getattr(interaction, 'act_name', None) == 'think'
+
+    def _conv_keep_thinking(self, waiting) -> None:
+        """A typed message still waits on a server on this computer: she shows her think pose
+        (replayed when the clip ends, never restarted) until the reply arrives. A line in
+        progress, a drag or a fall keep priority (`_companion_play_pose` refuses think then)."""
+        try:
+            if getattr(self, '_conv_waiting', None) is not waiting:
+                return
+            started = getattr(self, '_conv_wait_started', None)
+            if started is not None and time.monotonic() - started > self.THINKING_MAX_S:
+                return
+            if not self._conv_thinking_now():
+                if getattr(self, '_conv_thinking_logged', None) is not waiting:
+                    self._conv_thinking_logged = waiting
+                    self._companion_log('line', 'thinking')
+                self._companion_play_pose('think')
+            self._conv_later(self.THINKING_CHECK_S, lambda: self._conv_keep_thinking(waiting))
+        except Exception:
+            logging.getLogger(__name__).exception('_conv_keep_thinking failed (ignored)')
+
+    def _conv_on_chat_reply(self, user_text: str, reply, waiting=None) -> None:
+        if waiting is not None and getattr(self, '_conv_waiting', None) is waiting:
+            self._conv_waiting = None
         if reply is None:
             reply = self._conv_brain.offline_reply('chat', 'error')
         if reply.source in ('relay', 'own_key'):
             # Only a real conversation is sent back as history (kept in memory only).
-            self.mia_chat_history.add_turn(user_text, reply.text)
+            self.companion_chat_history.add_turn(user_text, reply.text)
         self._conv_show_reply(reply)
-        self._mia_note_mood_event('chat')
+        self._companion_note_mood_event('chat')
 
     # --- goodbye ----------------------------------------------------------------------------
     def _conv_send_bye(self) -> None:
@@ -146,9 +200,9 @@ class ConversationMixin:
         self._conv_on_bye_reply(self._conv_brain.offline_reply('bye', 'timeout'))
         return True
 
-    def _mia_on_absence_return(self, absence_s: float) -> None:
+    def _companion_on_absence_return(self, absence_s: float) -> None:
         """Director callback when the user comes back; she reacts to a long absence."""
-        self._mia_note_mood_event('zero_returns', absence_s=absence_s)
+        self._companion_note_mood_event('zero_returns', absence_s=absence_s)
         from DyberPet.brain_client import IDLE_EVENT_AFTER_S
         if absence_s >= IDLE_EVENT_AFTER_S and getattr(self, '_conv_brain', None) is not None:
             self._conv_event('idle')
@@ -172,13 +226,13 @@ class ConversationMixin:
         mouth following the clip (duration and pauses of the WAV)."""
         if not text:
             return
-        self._mia_log('line', 'prerecorded %s' % os.path.basename(str(path)))
-        self._emit_mia_bubble(text, voice=False, wav=None)
+        self._companion_log('line', 'prerecorded %s' % os.path.basename(str(path)))
+        self._emit_companion_bubble(text, voice=False, wav=None)
         controller = getattr(self, '_draconia_reactions', None)
         if controller is not None:
             controller.play(path, max(0.0, min(1.0, float(getattr(settings, 'volume', 1.0) or 0.0))))
         talk = getattr(self, 'talk_controller', None)
         if talk is not None and talk.active:
-            from DyberPet.mia_voice import wav_seconds
+            from DyberPet.companion_voice import wav_seconds
             from DyberPet.talk_controller import wav_mouth_pauses
             talk.voice_started(wav_seconds(path), wav_mouth_pauses(path))

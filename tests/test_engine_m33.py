@@ -6,9 +6,9 @@ sprites: every "73 frames / about 6 s" is now that clip's real length, read from
 stand 97; each walk 16 frames x 4 with measured step markers [7, 15]). All her clips play at
 12 fps. Standard library unittest + PySide6, no network, fake clocks.
 
-The pet contracts run the real `Interaction_worker`, `Animation_worker`, `PetWidget._mia_play_pose`,
+The pet contracts run the real `Interaction_worker`, `Animation_worker`, `PetWidget._companion_play_pose`,
 `resume_animation`, `_move_customized`, the life mixin (`_life_say_line`, `_life_talk_stop`, ...),
-`TalkController` and, for the climb, the real `MiaMicroTicker` with its `ClimbSession`, in a fresh
+`TalkController` and, for the climb, the real `CompanionMicroTicker` with its `ClimbSession`, in a fresh
 interpreter on a stand-in window (pynput, which needs an X display only to be imported, is
 stubbed there). The talk timer (40 ms in the pet) is a tick every 2 interaction ticks (42 ms);
 the micro timer (150 ms) every 7.
@@ -137,9 +137,9 @@ class Pet(PetLifeMixin):
     \"\"\"A stand-in window running the real PetWidget move path and pose entry point.\"\"\"
     _move_customized = PetWidget._move_customized
     limit_in_screen = PetWidget.limit_in_screen
-    _mia_play_pose = PetWidget._mia_play_pose
+    _companion_play_pose = PetWidget._companion_play_pose
     resume_animation = PetWidget.resume_animation
-    _mia_stop_follow_cursor = PetWidget._mia_stop_follow_cursor
+    _companion_stop_follow_cursor = PetWidget._companion_stop_follow_cursor
 
     def __init__(self, centre_x, screen=QRect(0, 0, 1280, 760), w=300, h=260):
         self._x, self._y, self._w, self._h = centre_x - w // 2, screen.height() - h, w, h
@@ -157,8 +157,8 @@ class Pet(PetLifeMixin):
     def height(self): return self._h
     def centre(self): return self._x + self._w // 2
     def devicePixelRatioF(self): return 1.5
-    def _mia_log(self, kind, text): self.lines.append('%s %s' % (kind, text))
-    def _mia_maybe_say_pose_line(self, pose): pass
+    def _companion_log(self, kind, text): self.lines.append('%s %s' % (kind, text))
+    def _companion_maybe_say_pose_line(self, pose): pass
 
 def interaction_for(pet, clock):
     reset_engine()
@@ -207,8 +207,8 @@ class Rig:
             self.starts.append([act_name, round(clock.t, 3)])
             original(interact, act_name, loop=loop, start_frame=start_frame)
         w.start_interact = start
-        pet._mia_show_bubble = lambda bubble: self.bubbles.append(round(clock.t, 3))
-        pet.mia_voice = SimpleNamespace(speak=lambda text, cfg=None: None, cancel=lambda: None,
+        pet._companion_show_bubble = lambda bubble: self.bubbles.append(round(clock.t, 3))
+        pet.companion_voice = SimpleNamespace(speak=lambda text, cfg=None: None, cancel=lambda: None,
                                         current_wav=None)
         pet.talk_controller = TalkController(play_pose=pet._life_talk_play, stop_pose=pet._life_talk_stop,
                                              now_fn=clock, on_release=pet._life_release_line,
@@ -327,7 +327,7 @@ print(json.dumps(out))
 
     def test_shy_has_a_good_weight_in_her_idle_pool_and_flustered_is_the_blush(self):
         # Draconia's rule: the blush is in her role's idle pool with weight >= 1.5.
-        from DyberPet.mia_director import load_role_idle_poses
+        from DyberPet.companion_director import load_role_idle_poses
         from DyberPet.brain_client import EMOTION_POSES
         pool = load_role_idle_poses(ROLE / 'pet_conf.json')
         self.assertIn('shy', pool)
@@ -354,7 +354,7 @@ class LinesNeverCutAClip(unittest.TestCase):
 out = {}
 def idle_then(line_at, seconds=12.0, pose=None, voiced=False, voice_at=None, until=9.0, extra=()):
     r = Rig()
-    r.pet._mia_play_pose('read')                         # a director idle clip
+    r.pet._companion_play_pose('read')                         # a director idle clip
     events = [(line_at, lambda: r.line(seconds, pose, voiced))]
     if voice_at is not None:
         events.append((voice_at, lambda: r.pet._life_voice_started(6.0)))
@@ -370,15 +370,15 @@ def drag():
     settings.draging, settings.onfloor = 1, 0            # what a real press does
     r.w.start_interact('mousedrag')
     r.events.append(['finishing', r.pet._life_body_busy()])
-r.pet._mia_play_pose('read')
+r.pet._companion_play_pose('read')
 r.run(2.0, at=[(1.0, lambda: r.line(12.0)), (1.5, drag)])
 out['drag'] = r.result()
 settings.draging, settings.onfloor = 0, 1
 
 r = Rig()
 def touch():
-    r.pet._mia_play_pose('happy')                        # director: refused during a line
-    r.pet._mia_play_pose('pinch', from_touch=True)       # touch reaction: at once
+    r.pet._companion_play_pose('happy')                        # director: refused during a line
+    r.pet._companion_play_pose('pinch', from_touch=True)       # touch reaction: at once
 r.line(12.0)
 r.run(6.0, at=[(2.0, touch)])
 out['touch'] = r.result()
@@ -495,7 +495,7 @@ class WalksFinishTheirStep(unittest.TestCase):
     CODE = RIG + '''
 out = {}
 r = Rig(centre_x=300)
-r.pet._mia_play_pose('right_walk')
+r.pet._companion_play_pose('right_walk')
 moves = []
 r.run(4.0, at=[(1.6, lambda: moves.append(r.pet.centre())),
                (1.6, lambda: r.line(12.0))])
@@ -515,7 +515,7 @@ walks = [conf.right, conf.act_dict['right_walk']] + [a for acts in conf.random_a
 saved = [(a, a.step_ends) for a in walks]
 for a in walks:
     a.step_ends = ()
-r.pet._mia_play_pose('right_walk')
+r.pet._companion_play_pose('right_walk')
 r.run(3.0, at=[(1.6, lambda: r.line(12.0))])
 for a, ends in saved:
     a.step_ends = ends
@@ -576,8 +576,8 @@ print(json.dumps(out))
 
 class ClimbNeverShowsAnotherFrame(unittest.TestCase):
     CODE = RIG + '''
-import DyberPet.mia_director as md
-from DyberPet.mia_director import MiaMicroTicker
+import DyberPet.companion_director as md
+from DyberPet.companion_director import CompanionMicroTicker
 outcomes = []
 _release = md.climb_release_outcome
 md.climb_release_outcome = lambda rng, *a: outcomes.append(_release(rng, *a)) or outcomes[-1]
@@ -595,7 +595,7 @@ def climb(seed, allow_fall=False):
                 'pos_y': float(pet._y), 'floor_y': float(floor), 'screen_top': 0.0,
                 'screen_height': 760.0, 'walking_toward': None}
     log = []
-    ticker = MiaMicroTicker(get_context=ctx, play_action=pet._mia_play_pose,
+    ticker = CompanionMicroTicker(get_context=ctx, play_action=pet._companion_play_pose,
                             apply_cursor_flip=lambda flip: None, on_edge=lambda side: None,
                             now_fn=clock, rng=random.Random(seed),
                             set_pos_y=lambda y: pet.move(pet._x, int(round(y))),
@@ -603,7 +603,7 @@ def climb(seed, allow_fall=False):
                             start_fall=lambda: None, get_climb_speed=pet._life_climb_speed,
                             hold_pose=pet._life_hold_climb_pose, handle_talk=False,
                             is_talking=lambda: False)
-    pet.mia_micro_ticker = ticker
+    pet.companion_micro_ticker = ticker
     del outcomes[:]
     ticker._start_climb('right', ctx(), clock.t)         # the edge decision, as on a wall touch
     samples, tick = [], 0

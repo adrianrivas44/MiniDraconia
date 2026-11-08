@@ -29,16 +29,19 @@ A local OpenAI-compatible server works too, and needs no key. Typical base URLs:
 - Ollama: `http://127.0.0.1:11434/v1`
 - LM Studio: `http://127.0.0.1:1234/v1`
 
-Start the server, load or pull a model in it, then enter that base URL and the model's name as the server lists it. Leave the API key empty.
+Start the server, load or pull a model in it, then enter that base URL and the model's name as the server lists it. Leave the API key empty. Only `localhost`, `127.0.0.1` and `::1` count as your own computer; any other address needs a key and `https://`. If you do enter a key for a local server, it is sent to that local server only.
 
-Two tips from a real test with Ollama on Windows (see [RECOMMENDED-SETUP.md](RECOMMENDED-SETUP.md)):
+What the app does for a server on your own computer (since 1.0.0-rc.3):
 
-- **Prefer `127.0.0.1` to `localhost`.** On Windows `localhost` resolves to the IPv6 address `::1` first; Ollama listens on IPv4 only, so every request waited about 2 seconds before falling back. With `127.0.0.1` the same replies took about 0.4 s.
-- **Warm the model up first** (for example `ollama run <model> hi`). The first request after the server starts has to load the model; a 7B model took longer than the app's timeout on the first try, so that first message falls back to a stored line. Only `localhost`, `127.0.0.1` and `::1` count as your own computer; any other address needs a key and `https://`. If you do enter a key for a local server, it is sent to that local server only.
+- **`localhost` works as fast as `127.0.0.1`.** When the host you typed is exactly `localhost`, the app connects to `127.0.0.1`, with the same scheme, port and path; if nothing answers there (the connection is refused), it tries `[::1]` once, for a server that listens on IPv6 only. Settings keeps the address as you typed it.
+- **It warms the model up.** The first request after the server starts has to load the model. When your own AI is on your own computer, the app sends one tiny request, the same one as *Test connection*, when it starts and when you save your settings. It runs in the background, never counts toward the daily limit, is never sent to another computer, is skipped when the daily limit is 0, and a failure only goes to the local log.
+- **It waits longer.** A request to your own computer waits up to 90 seconds (hosted services: 20 seconds), and while a typed message is still waiting after about 3 seconds she shows her thinking pose.
+
+Measured on rc.2, before these changes, with Ollama on Windows (see [RECOMMENDED-SETUP.md](RECOMMENDED-SETUP.md)): with `localhost` every reply waited about 2 seconds more than with `127.0.0.1` (Windows tried IPv6 `::1` first and Ollama listens on IPv4 only), and the first request after the server started took up to 41 seconds with a 7B model, longer than rc.2's 20-second timeout.
 
 ## Test connection
 
-*Test connection* sends one tiny request (`Reply with the single word OK.`, at most 5 tokens) with the key you just typed, or the stored one. It shows `Connection OK.` or the error (for example the HTTP status), never the key. The test does not count toward the daily limit.
+*Test connection* sends one tiny request (`Reply with the single word OK.`, at most 5 tokens) with the key you just typed, or the stored one. It runs in the background, so Settings stays usable while a local model loads. It shows `Connection OK.` or the error (for example the HTTP status), never the key. The test does not count toward the daily limit, and neither does the warm-up for a server on your own computer.
 
 ## The daily request limit
 
@@ -77,12 +80,12 @@ Nothing else: no touches, greetings, chatter or other desktop events (those alwa
 }
 ```
 
-with the headers `Content-Type: application/json` and, when you entered a key, `Authorization: Bearer <your key>`. She reads the first choice's message, takes a leading emotion tag such as `[happy]` as her pose, and shows the rest in her bubble (text only; this mode has no voice). Each request waits up to 20 seconds; a timeout, a network error or a server error (5xx) is tried once more. Any failure, a rejected key or the limit makes her answer from her stored lines: the bubble always works.
+with the headers `Content-Type: application/json` and, when you entered a key, `Authorization: Bearer <your key>`. She reads the first choice's message, takes a leading emotion tag such as `[happy]` as her pose, and shows the rest in her bubble (text only; this mode has no voice). Each request waits up to 20 seconds, or up to 90 seconds for a server on your own computer; a timeout, a network error or a server error (5xx) is tried once more. Any failure, a rejected key or the limit makes her answer from her stored lines: the bubble always works.
 
 See [privacy](PRIVACY.md) for everything she keeps on your computer.
 
 ## En español
 
-*Connect your own AI* no apunta a ningún proveedor: la URL base y el modelo empiezan vacíos y tú los escribes. Funciona con cualquier servicio compatible con OpenAI (`/chat/completions`): pega la URL base y el nombre del modelo que documenta tu servicio, y tu clave API. Un servidor en tu propio equipo no necesita clave: por ejemplo Ollama en `http://127.0.0.1:11434/v1` o LM Studio en `http://127.0.0.1:1234/v1`. En Windows usa `127.0.0.1` y no `localhost` (con `localhost` cada respuesta tardó unos 2 segundos más), y carga el modelo antes de hablarle (`ollama run <modelo> hi`). Cualquier otra dirección necesita clave y `https://`; la clave nunca se envía por `http://` sin cifrar a otro equipo.
+*Connect your own AI* no apunta a ningún proveedor: la URL base y el modelo empiezan vacíos y tú los escribes. Funciona con cualquier servicio compatible con OpenAI (`/chat/completions`): pega la URL base y el nombre del modelo que documenta tu servicio, y tu clave API. Un servidor en tu propio equipo no necesita clave: por ejemplo Ollama en `http://127.0.0.1:11434/v1` o LM Studio en `http://127.0.0.1:1234/v1`. Desde 1.0.0-rc.3, `localhost` funciona igual de rápido que `127.0.0.1` (la app se conecta a `127.0.0.1` y, si nada responde, prueba `[::1]` una vez; en rc.2, con `localhost`, cada respuesta tardó unos 2 segundos más), y la app calienta el modelo local con una petición mínima en segundo plano al arrancar y al guardar, que nunca cuenta para el límite. Una petición a tu propio equipo espera hasta 90 segundos (20 para un servicio en internet). Cualquier otra dirección necesita clave y `https://`; la clave nunca se envía por `http://` sin cifrar a otro equipo.
 
 *Test connection* hace una sola petición mínima y no cuenta para el límite. Un límite diario de peticiones (200 por defecto, editable) la detiene; al pasarlo responde con sus frases guardadas hasta el día siguiente. Tu clave se guarda cifrada con Windows DPAPI y nunca se muestra ni se registra; *Forget key* la borra y vuelve al modo sin conexión. Solo se envía lo que escribes en *Talk to Draconia*, la conversación escrita reciente y el prompt del personaje; los toques y demás eventos del escritorio nunca se envían.

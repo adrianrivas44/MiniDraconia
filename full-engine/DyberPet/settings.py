@@ -129,7 +129,7 @@ def init():
     act_id = 0
     current_act, previous_act = None, None
     global anim_act
-    anim_act = None  # Mia: acto que pinta Animation_worker (para no espejar caminatas)
+    anim_act = None  # Acto que pinta Animation_worker (para no espejar caminatas)
 
     global showing_dialogue_now
     showing_dialogue_now = False

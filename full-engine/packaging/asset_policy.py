@@ -19,10 +19,14 @@ One definition so the three gates cannot drift apart:
     rejected. Those names are private, so they are not in this tree: they are read from the
     git-ignored `.release-private-markers` file at the repository root (one literal per line,
     `#` comments), the same file the release scanner reads. Without it this rule is idle.
+    A line `word:<name>` matches <name> only as a whole token: a token is bounded by any
+    non-letter (`_`, digits and punctuation count as boundaries), so a longer word that merely
+    contains <name> does not match. A plain line matches anywhere (case-insensitive substring).
 
 Listing a file as allowed is NOT a rights determination; it only records that the
 per-clip listening approval exists.
 """
+import re
 from pathlib import Path, PurePosixPath
 
 APPROVED_AUDIO = frozenset({'res/role/Draconia/note/voice/head-01.wav'})
@@ -34,10 +38,13 @@ RELAY_SEED_NAME = 'minidraconia_relay.json'
 KEY_FILE_SUFFIX = '.dpapi'
 VOICE_PACK_DIR = 'voice_pack'
 MARKERS_FILE = Path(__file__).resolve().parents[2] / '.release-private-markers'
+WORD_PREFIX = 'word:'
 
 
 def load_other_product_names(path=MARKERS_FILE):
-    """Lower-cased private names from the markers file; () when it is absent."""
+    """Case-folded private names from the markers file; () when it is absent.
+
+    A `word:<name>` line is kept as 'word:<name>' (whole-token match, see find_name)."""
     try:
         text = Path(path).read_text(encoding='utf-8')
     except (FileNotFoundError, NotADirectoryError):
@@ -45,9 +52,38 @@ def load_other_product_names(path=MARKERS_FILE):
     names = []
     for line in text.splitlines():
         line = line.strip().casefold()
+        if line.startswith(WORD_PREFIX):
+            word = line[len(WORD_PREFIX):].strip()
+            line = WORD_PREFIX + word if word else ''
         if line and not line.startswith('#') and line not in names:
             names.append(line)
     return tuple(names)
+
+
+_PATTERNS = {}
+# A letter is a word character that is neither a digit nor `_` (any script, not only ASCII).
+_NOT_AFTER_LETTER = r'(?<![^\W\d_])'
+_NOT_BEFORE_LETTER = r'(?![^\W\d_])'
+
+
+def _pattern(name):
+    pattern = _PATTERNS.get(name)
+    if pattern is None:
+        if name.startswith(WORD_PREFIX):
+            body = _NOT_AFTER_LETTER + re.escape(name[len(WORD_PREFIX):]) + _NOT_BEFORE_LETTER
+        else:
+            body = re.escape(name)
+        pattern = _PATTERNS[name] = re.compile(body, re.IGNORECASE)
+    return pattern
+
+
+def find_name(text, names=None):
+    """Offset of the first hit of any marker in `text` (a str), or -1.
+
+    `names` defaults to OTHER_PRODUCT_NAMES; entries are as load_other_product_names returns them."""
+    names = OTHER_PRODUCT_NAMES if names is None else names
+    hits = [match.start() for match in (_pattern(name).search(text) for name in names if name) if match]
+    return min(hits) if hits else -1
 
 
 OTHER_PRODUCT_NAMES = load_other_product_names()
@@ -71,7 +107,7 @@ def violation(path):
     low = text.casefold()
     if any(word in low for word in FORBIDDEN_NAME_PARTS):
         return 'inherited-pet-asset'
-    if any(name in low for name in OTHER_PRODUCT_NAMES):
+    if find_name(text, OTHER_PRODUCT_NAMES) >= 0:
         return 'other-product-input'
     if parts and (parts[-1] == RELAY_SEED_NAME or parts[-1].endswith(KEY_FILE_SUFFIX)):
         return 'relay-seed' if parts[-1] == RELAY_SEED_NAME else 'own-key-file'

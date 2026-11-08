@@ -1,4 +1,4 @@
-"""Runtime regression: PetWidget._mia_micro_context with its real QRect current_screen.
+"""Runtime regression: PetWidget._companion_micro_context with its real QRect current_screen.
 
 current_screen is a QRect (availableGeometry at init, screen.geometry() on monitor switch). The method
 once called .geometry() on it again and raised AttributeError on every timer tick. Needs the product's
@@ -45,8 +45,8 @@ class MicroContextScreenGeometry(unittest.TestCase):
             with self.subTest(rect=rect.getRect()):
                 widget = SimpleNamespace(
                     workers={}, current_screen=rect, pos=lambda: QPoint(-120, 400), width=lambda: 515,
-                    mia_director=SimpleNamespace(is_asleep=False), _mia_available_poses=lambda: [])
-                context = self.PetWidget._mia_micro_context(widget)
+                    companion_director=SimpleNamespace(is_asleep=False), _companion_available_poses=lambda: [])
+                context = self.PetWidget._companion_micro_context(widget)
                 self.assertEqual(context['screen_top'], float(rect.y()))
                 self.assertEqual(context['screen_height'], float(rect.height()))
                 self.assertEqual(context['pos_y'], 400.0)

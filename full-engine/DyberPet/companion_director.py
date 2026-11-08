@@ -1,13 +1,13 @@
-"""Director de conducta de Mia para DyberPet.
+"""Director de conducta de la mascota para DyberPet.
 
 Toda la logica nueva de comportamiento (saludo/despedida, eleccion de accion
 ociosa, zonas de toque, reglas de borde, mirar al cursor, hablar, parpadeo,
 pantalla primaria) vive aqui. Se separa en:
 
 - Funciones puras (sin Qt) -> testeables con `pytest` sin abrir la app.
-- `MiaDirector`, un QObject fino que usa un QTimer para disparar `tick()` y
+- `CompanionDirector`, un QObject fino que usa un QTimer para disparar `tick()` y
   llama a las funciones puras; cablea con PetWidget mediante pocos ganchos
-  en DyberPet.py (ver docs/contrato-motor.md).
+  en DyberPet.py.
 
 Este archivo es codigo nuestro sobre DyberPet (GPL-3.0). No toca el nucleo
 upstream salvo los ganchos de pocas lineas documentados en DyberPet.py.
@@ -206,9 +206,8 @@ def choose_idle_pose(rng: random.Random, available_idle_poses: Sequence[str] = I
     return rng.choice(poses)
 
 
-# Mia: pool extendido de poses "sueltas" que el tick idle puede elegir
-# cuando hay animo/mesa mood disponibles (contrato mia-mood punto 4,
-# bloqueante B2: mia_brain.json["mood"] trae entradas para stretch, yawn,
+# Pool extendido de poses "sueltas" que el tick idle puede elegir
+# cuando hay animo/mesa mood disponibles (bloqueante B2: companion_brain.json["mood"] trae entradas para stretch, yawn,
 # climb, read, happy, greet, angry, shy, bored y peek que antes nunca se
 # aplicaban). pinch/touch_body se excluyen a propósito: necesitan un
 # toque real de User (TouchMoodReactor), no tienen sentido como idle
@@ -304,7 +303,7 @@ def choose_profile_idle_pose(rng: random.Random, available: Iterable[str],
                               own_idle_poses: Optional[dict] = None) -> str:
     """Elige pose idle incluyendo el pool propio del perfil (own_idle_poses,
     ponderado por sus pesos y, si hay animo, tambien por mood_table). Con
-    `own_idle_poses` vacio (Mia/Kitty/ChrisKitty hoy) el resultado es
+    `own_idle_poses` vacio (Kitty/ChrisKitty hoy) el resultado es
     exactamente el de `choose_weighted_pose`/`choose_idle_pose` de siempre.
     """
     own_idle_poses = own_idle_poses or {}
@@ -450,14 +449,14 @@ def should_sleep(idle_seconds: float, sleep_after_s: float = 300.0) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# M3: behavior_weights y sleep_after_s desde data/mia_brain.json
+# M3: behavior_weights y sleep_after_s desde data/companion_brain.json
 # ---------------------------------------------------------------------------
 
 def load_director_config(brain_path) -> dict:
-    """Lee `behavior_weights` y `sleep_after_s` de mia_brain.json.
+    """Lee `behavior_weights` y `sleep_after_s` de companion_brain.json.
 
     Si el archivo no existe, no es JSON valido, o no trae esas claves, cae a
-    DEFAULT_WEIGHTS / 300.0 (contrato-motor.md punto 4).
+    DEFAULT_WEIGHTS / 300.0.
     """
     cfg = {"weights": dict(DEFAULT_WEIGHTS), "sleep_after_s": 300.0}
     brain_path = Path(brain_path)
@@ -500,7 +499,7 @@ def should_mirror_frame(cursor_flip: bool, anim_act, current_act) -> bool:
 def pose_allowed(pose: str, interact, onfloor: int, dragging: int) -> bool:
     """Puerta única para las poses del director.
 
-    User vio a Mia "flotando": una pose (kick/blink/idle) reemplazaba la
+    User la vio "flotando": una pose (kick/blink/idle) reemplazaba la
     interacción 'mousedrag' del motor y la caída nunca terminaba. En el aire,
     arrastrando o mientras corre mousedrag, el motor original manda.
     """
@@ -558,7 +557,7 @@ TOUCH_ZONE_ACTIONS = {
 def decide_edge_action(rng: random.Random, climb_cfg: Optional[dict] = None) -> str:
     """50/50 entre "turn" (darse la vuelta) y "peek" (asomarse).
 
-    Mia: si `climb_cfg` trae `enabled=True`, "climb" entra primero con
+    Si `climb_cfg` trae `enabled=True`, "climb" entra primero con
     `climb_cfg["prob"]` de probabilidad (default 0.35, comportamiento 1 del
     contrato trepar-paredes); si no sale climb (o esta deshabilitado), se
     cae al 50/50 turn/peek de siempre. Sin climb_cfg el comportamiento es
@@ -574,7 +573,7 @@ def peek_duration(rng: random.Random, lo: float = 4.0, hi: float = 8.0) -> float
 
 
 def opposite_walk_pose(side: str) -> str:
-    """Al tocar el borde 'left'/'right' y decidir 'turn', Mia camina hacia
+    """Al tocar el borde 'left'/'right' y decidir 'turn', camina hacia
     el lado contrario (C4 informe revisor 2)."""
     return "right_walk" if side == "left" else "left_walk"
 
@@ -582,9 +581,8 @@ def opposite_walk_pose(side: str) -> str:
 def peek_pose_for_side(side: str, available_poses: Iterable[str]) -> tuple[str, bool]:
     """Pose a pedir para asomarse por `side` y si hay que espejarla a mano.
 
-    build_mia_role.py puede terminar registrando 'peek_left'/'peek_right'
-    como clips dedicados (igual que left_walk/right_walk, nota de Mia
-    2026-10-12: "peek_right/peek_left pasan a ser clips"); si ya existen en
+    El script que construye el role puede terminar registrando 'peek_left'/
+    'peek_right' como clips dedicados (igual que left_walk/right_walk); si ya existen en
     el role se piden tal cual, sin espejo manual. Si el role actual solo
     trae el acto generico 'peek' (hoy: arte base de peek_right), se espeja
     a mano para el lado izquierdo.
@@ -642,14 +640,13 @@ def next_sleep_stage(stage: Optional[str], available: Iterable[str]) -> str:
     return "sleep"
 
 
-class MiaMicroTicker:
+class CompanionMicroTicker:
     """Microcomportamientos que se revisan en cada tick corto (parpadeo,
     mirar al cursor, patalear mientras la arrastran, bordes, hablar).
 
-    Independiente del QTimer de 8-20s de MiaDirector: este ticker esta
+    Independiente del QTimer de 8-20s de CompanionDirector: este ticker esta
     pensado para dispararse cada ~0.1-0.2s desde un QTimer propio en
-    DyberPet.py. `now_fn` se inyecta para poder testear con un reloj falso
-    (contrato-motor.md: "mocks del reloj").
+    DyberPet.py. `now_fn` se inyecta para poder testear con un reloj falso.
     """
 
     def __init__(self, get_context: Callable[[], dict],
@@ -675,16 +672,16 @@ class MiaMicroTicker:
         self._on_edge = on_edge
         self._now_fn = now_fn
         self.rng = rng or random.Random()
-        # Mia: trepar paredes (comportamiento climb, contrato trepar-paredes).
+        # Trepar paredes (comportamiento climb, contrato trepar-paredes).
         self._climb_cfg = dict(climb_cfg) if climb_cfg else dict(DEFAULT_CLIMB_CFG)
         self._set_pos_y = set_pos_y
         self._on_climb_log = on_climb_log
         self._climb: Optional[ClimbSession] = None
-        # Mia: al soltarse cae de verdad (gravedad del motor) solo si "Allow Drop"
+        # Al soltarse cae de verdad (gravedad del motor) solo si "Allow Drop"
         # está encendido; si User lo apagó, baja trepando.
         self._allow_fall = allow_fall or (lambda: True)
         self._start_fall = start_fall
-        # Mia: animo (contrato mia-mood punto 2) -- +joy al llegar arriba.
+        # Animo -- +joy al llegar arriba.
         self._on_climb_top = on_climb_top
         # M3: speed matched to the sprite (holds do not slide), wall snap, freeze while hanging.
         self._get_climb_speed = get_climb_speed
@@ -708,8 +705,8 @@ class MiaMicroTicker:
 
     @property
     def is_climbing(self) -> bool:
-        """Expuesto para que MiaDirector (is_busy) e is_busy de DyberPet.py
-        sepan que Mia esta trepando: ni duerme ni cambia de pose mientras
+        """Expuesto para que CompanionDirector (is_busy) e is_busy de DyberPet.py
+        sepan que esta trepando: ni duerme ni cambia de pose mientras
         tanto (comportamiento 5 del contrato trepar-paredes)."""
         return self._climb is not None and self._climb.active
 
@@ -727,7 +724,7 @@ class MiaMicroTicker:
         now = self._now_fn()
 
         if ctx.get("dragging"):
-            # Mia: arrastrar cancela la trepada al instante (comportamiento 5:
+            # Arrastrar cancela la trepada al instante (comportamiento 5:
             # "el arrastre manda, como hoy").
             if self._climb is not None:
                 self._cancel_climb()
@@ -739,9 +736,9 @@ class MiaMicroTicker:
         climbing = self._tick_climb(ctx, now)
 
         if ctx.get("sleeping") and not climbing:
-            # Mia: dormida de verdad (C2 informe revisor 2). Mientras
+            # Dormida de verdad (C2 informe revisor 2). Mientras
             # sleeping=True: sin mirar al cursor, sin parpadeo, sin hablar;
-            # solo 'doze'/'sleep' (MiaDirector.is_asleep ya hace que
+            # solo 'doze'/'sleep' (CompanionDirector.is_asleep ya hace que
             # may_chatter() calle). Despierta solo con note_interaction().
             self._apply_cursor_flip(False)
             self._next_blink_at = None
@@ -814,7 +811,7 @@ class MiaMicroTicker:
         if self._set_pos_y is not None:
             self._set_pos_y(self._climb.y)
         if phase_before == "up" and self._climb is not None and self._climb.phase == "hold":
-            # Mia: animo (contrato mia-mood punto 2) -- llego arriba.
+            # Animo -- llego arriba.
             if self._on_climb_top is not None:
                 self._on_climb_top()
             # M3: hanging still -> freeze on the current frame (a running clip would slide).
@@ -860,8 +857,8 @@ class MiaMicroTicker:
         """C2 informe revisor 2: mientras sleeping=True, 'sleep' se queda
         en bucle (se re-dispara cuando el cuadro anterior termina, es decir
         cuando `state` vuelve a 'default'). La primera vez pide 'doze' si
-        el role la trae (nota de Mia 2026-10-12: bostezo y se queda dormida
-        de pie, una vez); si no existe, va directo a 'sleep'.
+        el role la trae (bostezo y se queda dormida de pie, una vez); si no
+        existe, va directo a 'sleep'.
 
         D2.2: when the role has a 'yawn' clip she first yawns once, complete (the next stage
         starts only when the clip is over, `state` back to 'default'), then doze -> sleep as
@@ -888,7 +885,7 @@ class MiaMicroTicker:
             self._next_blink_at = now + choose_blink_delay(self.rng)
 
     def _tick_cursor_flip(self, ctx: dict) -> None:
-        # Mia: fuera de 'default' (caminar, seguir cursor, poses) el espejo SE APAGA;
+        # Fuera de 'default' (caminar, seguir cursor, poses) el espejo SE APAGA;
         # antes quedaba pegado y el ciclo de caminar salía invertido (moonwalk).
         if ctx.get("state", "default") != "default":
             self._apply_cursor_flip(False)
@@ -899,16 +896,13 @@ class MiaMicroTicker:
 
     def _tick_drag(self, now: float) -> None:
         """C5 informe revisor 2: pide 'kick'/'drag' alternados mientras
-        arrastran a Mia. En produccion es efectivamente inerte: llega hasta
-        `_mia_play_pose`, pero `pose_allowed()` bloquea SIEMPRE las poses
+        la arrastran. En produccion es efectivamente inerte: llega hasta
+        `_companion_play_pose`, pero `pose_allowed()` bloquea SIEMPRE las poses
         del director mientras `dragging=1` (el pataleo real que ve User sale
         de la animacion 'drag' del motor base, no de aqui). Se deja
-        documentado y sin tocar su cableado desde `tick()` porque
-        `tests/test_mia_director.py::test_microticker_alternates_kick_and_drag_while_dragging`
-        (archivo fuera del alcance de esta tarea) ejercita este metodo
-        llamando a `tick()` con un `play_action` que no pasa por
-        `pose_allowed`; quitar la llamada rompería ese test sin poder
-        corregirlo aquí."""
+        documentado y sin tocar su cableado desde `tick()` porque un test
+        anterior ejercitaba este metodo llamando a `tick()` con un
+        `play_action` que no pasa por `pose_allowed`."""
         if self._next_drag_toggle_at is None:
             self._last_drag_pose = "kick"
             self._play_action("kick")
@@ -963,7 +957,7 @@ class MiaMicroTicker:
                 self._play_action("default")
 
     def _tick_talk(self, ctx: dict, now: float) -> None:
-        # Mia: 'talk' ya es un clip de video completo (boca + gesto, ~4 s, vuelve a la pose).
+        # 'talk' ya es un clip de video completo (boca + gesto, ~4 s, vuelve a la pose).
         # Se lanza UNA vez por globo; alternarlo cada 0.18 s lo reiniciaba sin parar.
         # H4 (informe revisor 3): si el globo aparece mientras state != 'default'
         # (caminando, leyendo...), 'talk' quedaba marcado como "hablado" sin
@@ -994,7 +988,7 @@ class DirectorState:
     on_floor: bool = True
     sleeping: bool = False
     last_activity_ts: float = float('-inf')   # D2.1: last line or typed message
-    sleep_kind: Optional[str] = None     # Mia: "nap" (siesta al azar, despierta sola) | "away" (User lejos del PC)
+    sleep_kind: Optional[str] = None     # "nap" (siesta al azar, despierta sola) | "away" (User lejos del PC)
     wake_at: float = 0.0
     combo_pending: Optional[str] = None  # perfil: secuencia de caracter en cola (t_108e7d40 punto 3)
 
@@ -1110,7 +1104,7 @@ def system_idle_seconds() -> Optional[float]:
 
     H5 (informe revisor 3): GetTickCount() devuelve un DWORD (32 bits sin
     signo); sin declarar `.restype`, ctypes lo trata como `c_long` CON
-    signo y, con más de 24.8 días de uptime, da negativo -> Mia creía que
+    signo y, con más de 24.8 días de uptime, da negativo -> creía que
     User SIEMPRE está usando el PC y el sueño 'away' nunca llegaba a
     ocurrir. Se declara DWORD y la resta se enmascara a 32 bits para que
     la vuelta del contador (a los ~49.7 días) tampoco rompa el cálculo.
@@ -1133,7 +1127,7 @@ def system_idle_seconds() -> Optional[float]:
         return None
 
 
-class MiaDirector(QObject if QTimer is not None else object):
+class CompanionDirector(QObject if QTimer is not None else object):
     """Orquesta el timer de 8-20 s y delega en las funciones puras de arriba.
 
     Se construye con callbacks pequenos que leen/escriben el PetWidget, para
@@ -1184,7 +1178,7 @@ class MiaDirector(QObject if QTimer is not None else object):
         if self._idle_pool:
             self.weights = fold_pose_weights(self.weights)
         # perfil: secuencias de caracter (t_108e7d40 punto 3), generico;
-        # vacio (Mia/Kitty/ChrisKitty hoy) == sin combos, comportamiento de siempre.
+        # vacio (Kitty/ChrisKitty hoy) == sin combos, comportamiento de siempre.
         self._combos = dict(combos or {})
         self._tick_range_s = tuple(tick_range_s)
         self._emitting_pose = False
@@ -1192,22 +1186,21 @@ class MiaDirector(QObject if QTimer is not None else object):
         self.rng = rng or random.Random()
         self._system_idle = system_idle_fn
         self._now = now_fn
-        # Mia: pesos de accion multiplicados por la emocion dominante
-        # (contrato mia-mood punto 4). Sin tabla/get_dominant_mood el
+        # Pesos de accion multiplicados por la emocion dominante
+        #. Sin tabla/get_dominant_mood el
         # comportamiento es idéntico al de antes (self.weights tal cual).
         self._mood_table = mood_table
         self._get_dominant_mood = get_dominant_mood
         self._on_absence_return = on_absence_return
         self._absence_threshold_s = absence_threshold_s
-        # Mia: decaimiento temporal real (contrato mia-mood, changes
-        # requested ronda 1). self.tick() corre cada 8-20 s sin importar si
+        # Decaimiento temporal real (changes requested ronda 1). self.tick() corre cada 8-20 s sin importar si
         # el pet esta dormido/ocupado/arrastrandose (a diferencia de
         # _tick_once, que se sale temprano en esos casos); por eso el
         # decaimiento de MoodEngine se engancha aqui y no dentro de
         # _tick_once, para que boredom/energy/annoyance/shyness evolucionen
         # con el paso del tiempo real aunque User no toque el pet.
         self._on_mood_tick = on_mood_tick
-        # Mia: reaccion de toque segun animo (bloqueante B1).
+        # Reaccion de toque segun animo (bloqueante B1).
         self._touch_reactor = TouchMoodReactor()
         self.state = DirectorState(last_interaction_ts=now_fn())
         # D2.1: no early naps. The warm-up counts from construction (the pet's start).
@@ -1248,7 +1241,7 @@ class MiaDirector(QObject if QTimer is not None else object):
         self.state.last_interaction_ts = now
         if self.state.sleeping:
             self._wake_up()
-        # Mia: User vuelve tras ausencia (contrato mia-mood punto 2).
+        # User vuelve tras ausencia.
         if self._on_absence_return and absence_s >= self._absence_threshold_s:
             try:
                 self._on_absence_return(absence_s)
@@ -1291,8 +1284,7 @@ class MiaDirector(QObject if QTimer is not None else object):
             self.note_action(pose)
 
     def _effective_weights(self) -> dict:
-        """Pesos base multiplicados por la emocion dominante (contrato
-        mia-mood punto 4); sin tabla o sin dominante conocido, devuelve
+        """Pesos base multiplicados por la emocion dominante; sin tabla o sin dominante conocido, devuelve
         self.weights tal cual (compat con llamadas existentes)."""
         dominant = self._current_dominant()
         if not self._mood_table or not dominant:
@@ -1385,8 +1377,8 @@ class MiaDirector(QObject if QTimer is not None else object):
 
     @property
     def is_asleep(self) -> bool:
-        """Expuesto para que _mia_chatter (DyberPet.py) y cualquier otro
-        gancho sepan si Mia esta dormida sin leer el dataclass interno
+        """Expuesto para que _companion_chatter (DyberPet.py) y cualquier otro
+        gancho sepan si esta dormida sin leer el dataclass interno
         (C2 informe revisor 2)."""
         return self.state.sleeping
 
@@ -1408,13 +1400,13 @@ class MiaDirector(QObject if QTimer is not None else object):
         now = self._now()
         sys_idle = self._system_idle() if self._system_idle else None
         if self.state.sleeping:
-            # Mia: siesta -> despierta sola; sueño "away" -> despierta cuando User vuelve al PC.
+            # Siesta -> despierta sola; sueño "away" -> despierta cuando User vuelve al PC.
             if self.state.sleep_kind == "nap" and now >= self.state.wake_at:
                 self._wake_up()
             elif self.state.sleep_kind == "away" and sys_idle is not None and sys_idle < 60:
                 self._wake_up()
             return
-        # Sueño largo: nadie toca a Mia Y (si se puede saber) User no usa el PC.
+        # Sueño largo: nadie la toca Y (si se puede saber) User no usa el PC.
         idle_s = now - self.state.last_interaction_ts
         if sys_idle is not None:
             idle_s = min(idle_s, sys_idle)
@@ -1451,7 +1443,7 @@ class MiaDirector(QObject if QTimer is not None else object):
                 self._log('walk none (no room)')
                 self._emit_idle(available)
                 return
-            # build_mia_role.py registra el ciclo de caminar como
+            # El script que construye el role registra el ciclo de caminar como
             # "left_walk"/"right_walk" (pet_conf['random_act'], no
             # "walk_left"/"walk_right"); con el nombre equivocado caminar
             # era un NO-OP real (informe revisor B2).
@@ -1461,14 +1453,14 @@ class MiaDirector(QObject if QTimer is not None else object):
             self._log('follow')
             self._play_action("follow_cursor")
         elif action == "sleep":
-            # Mia: siesta corta al azar; despierta sola (antes quedaba dormida para siempre).
+            # Siesta corta al azar; despierta sola (antes quedaba dormida para siempre).
             self._go_to_sleep("nap")
         elif self._combos and action in available:
             # Solo perfiles que optan por secuencias: pesos de poses propias.
             self._emit_pose(action)
 
 
-# --- Mia: charla espontánea con el modelo local (User: "no habla, solo saluda") ---
+# --- Charla espontánea con el modelo local (User: "no habla, solo saluda") ---
 
 _POSE_DESC = {
     "read": "you are reading a book", "sit": "you are sitting down for a rest",
@@ -1511,7 +1503,7 @@ _FALLBACK_LINE_ALIASES = {"touch": "touch_body", "pat": "patpat"}
 def fallback_line(key: str, lines: Optional[dict] = None) -> str:
     """Frase de respaldo para `key` ("greet"/"bye"/"touch"/"pat").
 
-    Sin `lines` (perfil sin *_lines.json propio: Mia/Kitty/ChrisKitty,
+    Sin `lines` (perfil sin *_lines.json propio: Kitty/ChrisKitty,
     contrato punto 8) devuelve LINES[key] tal cual, sin cambios. Con
     `lines` (perfil propio ya cargado) usa su primera
     frase para `key` o, si no la tiene, para el alias en
@@ -1594,7 +1586,7 @@ DEFAULT_CLIMB_CFG = {
 
 
 def load_climb_config(brain_cfg_or_path) -> dict:
-    """Lee la clave "climb" de mia_brain.json.
+    """Lee la clave "climb" de companion_brain.json.
 
     Acepta la ruta del archivo o un dict ya cargado (p. ej. por
     `load_director_config`). Si falta el archivo, no es JSON valido, o no
@@ -1743,13 +1735,11 @@ class ClimbSession:
 
 
 def clean_reply(text: Optional[str], limit: int = 140) -> Optional[str]:
-    """Quita comillas, prefijo 'Mia:' y recorta en palabra."""
+    """Quita comillas y recorta en palabra (los prefijos de rol genericos y
+    de Draconia los quita brain_client)."""
     if not text:
         return None
     t = " ".join(str(text).split()).strip()
-    for prefix in ("Mia:", "Mía:", "MIA:", "Mia says:"):
-        if t.startswith(prefix):
-            t = t[len(prefix):].strip()
     t = t.strip('"“”«»\'').strip()
     if not t:
         return None
@@ -1760,11 +1750,11 @@ def clean_reply(text: Optional[str], limit: int = 140) -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
-# 12. Animo: pesos de accion por emocion y frase por clip (contrato mia-mood)
+# 12. Animo: pesos de accion por emocion y frase por clip
 # ---------------------------------------------------------------------------
 
 def load_mood_table(brain_path) -> dict:
-    """Lee data/mia_brain.json["mood"] (pose -> {emocion: multiplicador}).
+    """Lee data/companion_brain.json["mood"] (pose -> {emocion: multiplicador}).
 
     Si falta el archivo, no es JSON valido o no trae la clave, devuelve {}
     (sin tabla, mood_weighted_choice deja los pesos intactos).
@@ -1810,7 +1800,7 @@ def mood_weighted_choice(weights: dict, dominant: str, mood_table: dict) -> dict
 
 
 def load_lines(lines_path) -> dict:
-    """Lee data/mia_lines.json (clave "pose" o "pose|emocion" -> lista de
+    """Lee data/companion_lines.json (clave "pose" o "pose|emocion" -> lista de
     frases). Si falta o es invalido, devuelve {} (sin frase instantanea,
     el llamador sigue con la charla del LLM o sin globo)."""
     lines_path = Path(lines_path)
@@ -1864,7 +1854,7 @@ class TouchMoodReactor:
     ablandamiento gradual ("1a caricia angry/pinch, 2a-3a se ablanda a shy
     o happy") ya lo hace MoodEngine (pending_soften, ventana de tiempo
     real entre caricias): esta clase solo traduce la dominante VIGENTE a
-    una pose, asi que en cuanto MoodEngine saca a Mia de angry, deja de
+    una pose, asi que en cuanto MoodEngine la saca de angry, deja de
     devolver 'angry'/'pinch' sola.
 
     shy -> 'shy' la primera vez de la racha; si User sigue tocando
@@ -1923,7 +1913,7 @@ def mood_touch_fallback_line(mood_pose: str, lines: Optional[dict] = None) -> st
     usaba a secas, en ingles fijo, aunque el perfil activo ya
     traiga su propia frase para esa clave (<pet>_lines.json: angry,
     shy, bored, peek, pinch). Con `lines` (perfil propio, igual que
-    `fallback_line`) se usa esa frase; sin `lines` (Mia/Kitty/ChrisKitty,
+    `fallback_line`) se usa esa frase; sin `lines` (Kitty/ChrisKitty,
     contrato punto 8) cae exactamente a MOOD_TOUCH_LINES de siempre."""
     if lines:
         options = lines.get(mood_pose)
@@ -1932,11 +1922,11 @@ def mood_touch_fallback_line(mood_pose: str, lines: Optional[dict] = None) -> st
     return MOOD_TOUCH_LINES[mood_pose]
 
 
-# Mia: cuando la dominante CAMBIA (toque o decaimiento) a una de estas, el
+# Cuando la dominante CAMBIA (toque o decaimiento) a una de estas, el
 # director debe reproducir ese clip una vez con frase (bloqueante B1:
 # "Cuando la dominante cambia a angry/shy/bored, el director reproduce
 # ese clip una vez (con frase)"). Logica minima, usada por los ganchos
-# _mia_note_mood_event/_mia_mood_tick de DyberPet.py.
+# _companion_note_mood_event/_companion_mood_tick de DyberPet.py.
 MOOD_ANNOUNCE_CLIPS = ("angry", "shy", "bored")
 
 

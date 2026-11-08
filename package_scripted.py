@@ -482,7 +482,6 @@ def other_product_inputs(root=ROOT):
     Any hit fails the preflight: nothing of it may reach the public build."""
     root = Path(root)
     policy = asset_policy()
-    words = [name.encode('utf-8') for name in policy.OTHER_PRODUCT_NAMES]
     hits = []
     for name in source_inputs(root):
         rule = policy.violation(name)
@@ -492,8 +491,8 @@ def other_product_inputs(root=ROOT):
         path = root/name
         if path.suffix.lower() not in _TEXT_SUFFIXES or path.stat().st_size > 4 * 1024 * 1024:
             continue
-        data = path.read_bytes().lower()
-        if any(word in data for word in words):
+        # Same whole-token (`word:` lines) / substring match as the path rule.
+        if policy.find_name(path.read_bytes().decode('utf-8', errors='replace'), policy.OTHER_PRODUCT_NAMES) >= 0:
             hits.append(name)
     return hits
 

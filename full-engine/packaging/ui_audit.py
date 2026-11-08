@@ -18,8 +18,8 @@ def audit(root, profile):
     chat_action = next(action for action in pet.StatMenu.actions() if action.text() == 'Chat')
     chat_action.trigger()
     app.processEvents()
-    chat_event = {'widget_class': type(pet.mia_chat_box).__name__,
-                  'visible_offscreen': pet.mia_chat_box.isVisible() and app.platformName() == 'offscreen'}
+    chat_event = {'widget_class': type(pet.companion_chat_box).__name__,
+                  'visible_offscreen': pet.companion_chat_box.isVisible() and app.platformName() == 'offscreen'}
     assert chat_event['visible_offscreen'], chat_event
     report = {'menu': menu, 'pet_class': type(pet).__name__, 'sprite_pixels': pixels,
               'chat_event': chat_event,

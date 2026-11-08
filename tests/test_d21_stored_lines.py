@@ -8,8 +8,8 @@ it, through the same playback and talk sync as relay voice.
 
 Standard library unittest + PySide6, no network: a spy transport answers every request and the
 socket is denied. The pet-window contracts run the real `PetWidget` entry points
-(`_send_mia_greeting`, `_draconia_react`, `_mia_chatter`, `_send_mia_bye`, `_on_mia_chat_sent`,
-`_emit_mia_bubble`) on a stand-in window in a fresh interpreter (pynput, which needs an X display
+(`_send_companion_greeting`, `_draconia_react`, `_companion_chatter`, `_send_companion_bye`, `_on_companion_chat_sent`,
+`_emit_companion_bubble`) on a stand-in window in a fresh interpreter (pynput, which needs an X display
 only to be imported, is stubbed there; nothing here uses it). No test reads source text.
 """
 import hashlib
@@ -99,8 +99,8 @@ from DyberPet.pet_life import PetLifeMixin
 from DyberPet.pet_conversation import ConversationMixin
 from DyberPet import brain_client
 from DyberPet.brain_client import ConversationBrain, RelayVoiceEngine
-from DyberPet.mia_chat import ChatHistory
-from DyberPet.mia_voice import MiaVoice
+from DyberPet.companion_chat import ChatHistory
+from DyberPet.companion_voice import CompanionVoice
 from DyberPet.voice_pack import VoicePack
 from DyberPet.draconia_reactions import Reactions
 
@@ -159,40 +159,40 @@ def settle(pet, until=lambda: True, seconds=5.0):
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
         app.processEvents()
-        if pet._conv_calls.pending() == 0 and not pet.mia_voice._workers and until():
+        if pet._conv_calls.pending() == 0 and not pet.companion_voice._workers and until():
             break
         time.sleep(0.01)
     app.processEvents()
 
 class Pet(QWidget, PetLifeMixin, ConversationMixin):
-    _send_mia_greeting = PetWidget._send_mia_greeting
-    _send_mia_bye = PetWidget._send_mia_bye
-    _mia_ask = PetWidget._mia_ask
-    _mia_chatter = PetWidget._mia_chatter
-    _on_mia_chat_sent = PetWidget._on_mia_chat_sent
+    _send_companion_greeting = PetWidget._send_companion_greeting
+    _send_companion_bye = PetWidget._send_companion_bye
+    _companion_ask = PetWidget._companion_ask
+    _companion_chatter = PetWidget._companion_chatter
+    _on_companion_chat_sent = PetWidget._on_companion_chat_sent
     _draconia_react = PetWidget._draconia_react
-    _emit_mia_bubble = PetWidget._emit_mia_bubble
-    _mia_available_poses = PetWidget._mia_available_poses
+    _emit_companion_bubble = PetWidget._emit_companion_bubble
+    _companion_available_poses = PetWidget._companion_available_poses
 
     def __init__(self, mode, pack=None, relay_voice=True):
         super().__init__()
         self.clock = Clock()
         self.bubbles, self.logs, self.poses, self.clips = [], [], [], []
         self.activity = 0
-        self.mia_chat_history = ChatHistory()
-        self.mia_chat_box = None
+        self.companion_chat_history = ChatHistory()
+        self.companion_chat_box = None
         self.pet_conf = SimpleNamespace(act_dict={p: 1 for p in (
             'patpat', 'pinch', 'touch_body', 'spell', 'angry', 'shy', 'hairflip', 'greet', 'bye',
             'talk', 'happy', 'think', 'tea', 'slowclap', 'bored')})
         self.workers = {'Interaction': SimpleNamespace(interact=None, act_name=None)}
-        self.mia_mood = SimpleNamespace(dominant='content', mood_context_prompt=lambda: '')
-        self.mia_director = SimpleNamespace(rng=random.Random(3), is_asleep=False,
+        self.companion_mood = SimpleNamespace(dominant='content', mood_context_prompt=lambda: '')
+        self.companion_director = SimpleNamespace(rng=random.Random(3), is_asleep=False,
                                             note_activity=self._note_activity)
         self.brain_file = os.path.join(TMP, 'brain-%s-%s.json' % (mode, id(self)))
         json.dump({'voice': {'enabled': False, 'volume': 0.8}, 'relay_voice': relay_voice},
                   open(self.brain_file, 'w'))
         self.player = FakePlayer()
-        self.mia_voice = MiaVoice(engine=RelayVoiceEngine(lambda: dict(RELAY) if mode == 'relay' else None, spy),
+        self.companion_voice = CompanionVoice(engine=RelayVoiceEngine(lambda: dict(RELAY) if mode == 'relay' else None, spy),
                                   player=self.player, tmp_dir=os.path.join(TMP, 'voice-%s' % id(self)))
         brain = ConversationBrain(relay_loader=lambda: dict(RELAY) if mode == 'relay' else None,
                                   own_key_loader=lambda: dict(OWN) if mode == 'own_key' else None,
@@ -203,12 +203,12 @@ class Pet(QWidget, PetLifeMixin, ConversationMixin):
         settle(self)
 
     def _note_activity(self): self.activity += 1
-    def _mia_brain_path(self): return Path(self.brain_file)
-    def _mia_show_bubble(self, bubble): self.bubbles.append(bubble['message'].replace('\n', ' '))
-    def _mia_play_pose(self, pose, **kw): self.poses.append(pose)
-    def _mia_note_mood_event(self, kind, **meta): pass
-    def _mia_log(self, kind, text): self.logs.append('%s %s' % (kind, text))
-    def _mia_schedule_chatter(self, first=False): pass
+    def _companion_brain_path(self): return Path(self.brain_file)
+    def _companion_show_bubble(self, bubble): self.bubbles.append(bubble['message'].replace('\n', ' '))
+    def _companion_play_pose(self, pose, **kw): self.poses.append(pose)
+    def _companion_note_mood_event(self, kind, **meta): pass
+    def _companion_log(self, kind, text): self.logs.append('%s %s' % (kind, text))
+    def _companion_schedule_chatter(self, first=False): pass
     def fresh_reactions(self):
         # A fresh controller per event: its own 3 s line cooldown never hides a line here.
         self._draconia_reactions = Reactions(
@@ -222,13 +222,13 @@ def react(event):
     return run
 
 def bye(pet):
-    pet._send_mia_bye()
+    pet._send_companion_bye()
     pet._conv_finish_bye()
 
-EVENT_CALLS = [('greet', lambda pet: pet._send_mia_greeting()), ('pat', react('head')),
+EVENT_CALLS = [('greet', lambda pet: pet._send_companion_greeting()), ('pat', react('head')),
                ('pinch', react('cheek')), ('touch_body', react('body')), ('drag', react('drag')),
-               ('fall', react('fall')), ('idle', lambda pet: pet._mia_on_absence_return(400.0)),
-               ('chatter', lambda pet: pet._mia_chatter()), ('bye', bye)]
+               ('fall', react('fall')), ('idle', lambda pet: pet._companion_on_absence_return(400.0)),
+               ('chatter', lambda pet: pet._companion_chatter()), ('bye', bye)]
 '''
 
 
@@ -267,7 +267,7 @@ for mode in ('relay', 'own_key', 'offline'):
     event_requests = list(requests)
     voice_played = list(pet.player.played)
     del requests[:]
-    pet._on_mia_chat_sent('hello there')
+    pet._on_companion_chat_sent('hello there')
     settle(pet, until=lambda: len(pet.bubbles) > sum(answered.values()))
     settle(pet, until=lambda: mode != 'relay' or '/v1/tts' in requests)
     out[mode] = {'setup': setup_requests, 'events': event_requests, 'answered': answered,
@@ -489,7 +489,7 @@ class StoredVoiceSync(unittest.TestCase):
             saved = getattr(settings, name, None)
             self.addCleanup(setattr, settings, name, saved)
             setattr(settings, name, value)
-        from DyberPet.mia_voice import MiaVoice
+        from DyberPet.companion_voice import CompanionVoice
         from DyberPet.pet_conversation import ConversationMixin
         from DyberPet.pet_life import PetLifeMixin
         from DyberPet.talk_controller import TalkController
@@ -518,7 +518,7 @@ class StoredVoiceSync(unittest.TestCase):
         class Pet(PetLifeMixin, ConversationMixin):
             def __init__(self):
                 self.events, self.voice_started = [], []
-                self.mia_voice = MiaVoice(Engine(), player=Player(), tmp_dir=folder / 'tmp')
+                self.companion_voice = CompanionVoice(Engine(), player=Player(), tmp_dir=folder / 'tmp')
                 self.talk_controller = TalkController(lambda pose: None, lambda pose: None, now_fn=lambda: clock[0],
                                                       on_release=self._life_release_line)
                 started = self.talk_controller.voice_started
@@ -527,17 +527,17 @@ class StoredVoiceSync(unittest.TestCase):
                     self.voice_started.append((round(duration, 3), [tuple(round(x, 3) for x in p) for p in pauses]))
                     return started(duration, pauses)
                 self.talk_controller.voice_started = record
-                self.mia_voice.on_started = self._life_voice_started
-                self.mia_voice.on_failed = self.talk_controller.voice_failed
+                self.companion_voice.on_started = self._life_voice_started
+                self.companion_voice.on_failed = self.talk_controller.voice_failed
                 self.workers = {}
 
-            def _mia_show_bubble(self, bubble):
+            def _companion_show_bubble(self, bubble):
                 self.events.append(('bubble', bubble['message'], round(clock[0], 3)))
 
-            def _mia_log(self, kind, text):
+            def _companion_log(self, kind, text):
                 pass
 
-            def _mia_play_pose(self, pose, **kwargs):
+            def _companion_play_pose(self, pose, **kwargs):
                 pass
         return Pet(), clock
 
@@ -554,10 +554,10 @@ class StoredVoiceSync(unittest.TestCase):
         bubble = {'message': 'One pat. I counted.', 'timeout': 4.0}
         stored, clock = self.rig(self.folder)
         stored._life_say_line('One pat. I counted.', dict(bubble), {'enabled': True, 'volume': 0.8}, wav=str(self.wav))
-        self.assertEqual(stored.mia_voice._player.played, [str(self.wav)])
+        self.assertEqual(stored.companion_voice._player.played, [str(self.wav)])
 
         relay, clock2 = self.rig(self.folder)
-        type(relay.mia_voice._engine).source = self.wav
+        type(relay.companion_voice._engine).source = self.wav
         relay._life_say_line('One pat. I counted.', dict(bubble), {'enabled': True, 'volume': 0.8})
         app = qt_app()
         deadline = time.monotonic() + 5
@@ -574,19 +574,19 @@ class StoredVoiceSync(unittest.TestCase):
 
     def test_the_stored_file_is_never_deleted_and_the_relay_file_is(self):
         pet, _ = self.rig(self.folder)
-        self.assertTrue(pet.mia_voice.play_stored(str(self.wav), {'enabled': True}))
-        pet.mia_voice.notify_playback_finished()
+        self.assertTrue(pet.companion_voice.play_stored(str(self.wav), {'enabled': True}))
+        pet.companion_voice.notify_playback_finished()
         self.assertTrue(self.wav.is_file())
-        type(pet.mia_voice._engine).source = self.wav
-        pet.mia_voice.speak('x', {'enabled': True})
+        type(pet.companion_voice._engine).source = self.wav
+        pet.companion_voice.speak('x', {'enabled': True})
         app = qt_app()
         deadline = time.monotonic() + 5
-        while pet.mia_voice.current_wav is None and time.monotonic() < deadline:
+        while pet.companion_voice.current_wav is None and time.monotonic() < deadline:
             app.processEvents()
             time.sleep(0.01)
-        played = Path(pet.mia_voice.current_wav)
+        played = Path(pet.companion_voice.current_wav)
         self.assertTrue(played.is_file())
-        pet.mia_voice.notify_playback_finished()
+        pet.companion_voice.notify_playback_finished()
         self.assertFalse(played.exists())
         self.assertTrue(self.wav.is_file())
 
@@ -603,12 +603,12 @@ class StoredVoiceSync(unittest.TestCase):
 
     def test_voice_off_plays_nothing(self):
         pet, _ = self.rig(self.folder)
-        self.assertFalse(pet.mia_voice.play_stored(str(self.wav), {'enabled': False}))
-        self.assertEqual(pet.mia_voice._player.played, [])
+        self.assertFalse(pet.companion_voice.play_stored(str(self.wav), {'enabled': False}))
+        self.assertEqual(pet.companion_voice._player.played, [])
 
 
 class PetWindowVoiceGate(unittest.TestCase):
-    """The real `_emit_mia_bubble`: pack audio follows the Voice switch, Settings' Mute (volume 0)
+    """The real `_emit_companion_bubble`: pack audio follows the Voice switch, Settings' Mute (volume 0)
     and MINIDRACONIA_MUTE; without a pack, or for a line it does not have, she is unvoiced."""
 
     CODE = r'''
@@ -628,10 +628,10 @@ json.dump({'voice_id': 'v', 'lines': entries}, open(os.path.join(pack, 'manifest
 def run(mode, pack_dir, relay_voice=True, volume=0.5):
     settings.volume = volume
     pet = Pet(mode, pack=pack_dir, relay_voice=relay_voice)
-    pet._send_mia_greeting()
+    pet._send_companion_greeting()
     pet.fresh_reactions(); pet.clock.t += 25; pet._draconia_react('cheek')
-    pet.clock.t += 25; pet._mia_chatter()            # chatter has no recording in this pack
-    pet.clock.t += 25; pet._on_mia_chat_sent('hi') if mode == 'offline' else None
+    pet.clock.t += 25; pet._companion_chatter()            # chatter has no recording in this pack
+    pet.clock.t += 25; pet._on_companion_chat_sent('hi') if mode == 'offline' else None
     settle(pet)
     return {'played': pet.player.played, 'poses': pet.poses, 'voice_menu': pet._conv_has_voice_pack(),
             'logs': [l for l in pet.logs if l.startswith('voice ')]}

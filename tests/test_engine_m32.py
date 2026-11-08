@@ -6,8 +6,8 @@ For Draconia: her `tea` clip is a teacup, her idle pool is in her role (pet_conf
 `idle_poses`), and every clip length is her own (walk 16 frames x 4, talk 39, stand 97...).
 
 Standard library unittest + PySide6, no network, fake clocks. The pet-window contracts run the
-real `PetWidget._move_customized`, `limit_in_screen`, `_mia_play_pose`, `resume_animation` and
-`_mia_chatter` in a fresh interpreter, on a stand-in window with a screen rect (pynput, which
+real `PetWidget._move_customized`, `limit_in_screen`, `_companion_play_pose`, `resume_animation` and
+`_companion_chatter` in a fresh interpreter, on a stand-in window with a screen rect (pynput, which
 needs an X display only to be imported, is stubbed there; nothing here uses it).
 """
 import json
@@ -116,11 +116,11 @@ class Pet(PetLifeMixin):
     """A stand-in window running the real PetWidget move path and pose entry point."""
     _move_customized = PetWidget._move_customized
     limit_in_screen = PetWidget.limit_in_screen
-    _mia_play_pose = PetWidget._mia_play_pose
+    _companion_play_pose = PetWidget._companion_play_pose
     resume_animation = PetWidget.resume_animation
-    _mia_stop_follow_cursor = PetWidget._mia_stop_follow_cursor
-    _mia_chatter = PetWidget._mia_chatter
-    _mia_ask = PetWidget._mia_ask
+    _companion_stop_follow_cursor = PetWidget._companion_stop_follow_cursor
+    _companion_chatter = PetWidget._companion_chatter
+    _companion_ask = PetWidget._companion_ask
 
     def __init__(self, centre_x, screen=QRect(0, 0, 1280, 760), w=300, h=260):
         self._x, self._y, self._w, self._h = centre_x - w // 2, screen.height() - h, w, h
@@ -138,8 +138,8 @@ class Pet(PetLifeMixin):
     def height(self): return self._h
     def centre(self): return self._x + self._w // 2
     def devicePixelRatioF(self): return 1.5
-    def _mia_log(self, kind, text): self.lines.append('%s %s' % (kind, text))
-    def _mia_maybe_say_pose_line(self, pose): pass
+    def _companion_log(self, kind, text): self.lines.append('%s %s' % (kind, text))
+    def _companion_maybe_say_pose_line(self, pose): pass
 
 def interaction_for(pet, clock):
     reset_engine()
@@ -224,7 +224,7 @@ out = {}
 # A. A director walk reaches the right wall: 4 clamped frames end it (not the 5.3 s clip).
 clock = Clock(); pet = Pet(centre_x=1240)
 w = interaction_for(pet, clock)
-pet._mia_play_pose('right_walk')
+pet._companion_play_pose('right_walk')
 ticks = 0
 while w.interact is not None and ticks < 2000:
     w.run(); clock.t += 0.021; ticks += 1
@@ -234,7 +234,7 @@ out['director'] = {'interact': w.interact, 'ticks': ticks, 'centre': pet.centre(
 # B. Already at the right wall: a director walk to the right turns around and travels.
 clock = Clock(); pet = Pet(centre_x=1280)
 w = interaction_for(pet, clock)
-pet._mia_play_pose('right_walk')
+pet._companion_play_pose('right_walk')
 for _ in range(200):
     w.run(); clock.t += 0.021
 out['turn'] = {'act': w.act_name, 'centre': pet.centre(), 'lines': walk_lines(pet)}
@@ -383,14 +383,14 @@ class Variety(unittest.TestCase):
         return set(acts) | {'climb_down'}
 
     def pool(self):
-        from DyberPet.mia_director import load_role_idle_poses
+        from DyberPet.companion_director import load_role_idle_poses
         return load_role_idle_poses(ROLE / 'pet_conf.json')
 
     def director(self, seed, pool, combos=None):
         qt_app()
-        from DyberPet.mia_director import MiaDirector
+        from DyberPet.companion_director import CompanionDirector
         played = []
-        director = MiaDirector(get_available_poses=self.available, play_action=played.append,
+        director = CompanionDirector(get_available_poses=self.available, play_action=played.append,
                                is_busy=lambda: False, rng=random.Random(seed), system_idle_fn=None,
                                idle_pool=pool, combos=combos)
         director.weights = {'idle': 1.0}
@@ -422,7 +422,7 @@ class Variety(unittest.TestCase):
                 self.assert_no_repeat_within_4(played)
 
     def test_her_combos_never_repeat_one_of_the_last_three(self):
-        from DyberPet.mia_director import load_combos
+        from DyberPet.companion_director import load_combos
         combos = load_combos(ENGINE / 'data' / 'draconia_brain.json')
         self.assertTrue(combos, 'her profile defines character sequences')
         for seed in (2, 11):
@@ -448,7 +448,7 @@ class Variety(unittest.TestCase):
         self.assertEqual(director.recent_idle[-1], 'hairflip', 'and counts as a recent idle pose')
 
     def test_director_weights(self):
-        from DyberPet.mia_director import DEFAULT_WEIGHTS, load_director_config
+        from DyberPet.companion_director import DEFAULT_WEIGHTS, load_director_config
         weights = {'idle': 0.55, 'walk': 0.25, 'follow_cursor': 0.10, 'sleep': 0.05}
         self.assertEqual(DEFAULT_WEIGHTS, weights)
         self.assertEqual(load_director_config('/nonexistent/no_brain.json')['weights'], DEFAULT_WEIGHTS,
@@ -458,7 +458,7 @@ class Variety(unittest.TestCase):
         self.assertEqual(bundled, dict(weights, sleep=0.015), 'her bundled profile: rarer naps')
 
     def test_older_profile_pose_weights_fold_into_idle(self):
-        from DyberPet.mia_director import fold_pose_weights
+        from DyberPet.companion_director import fold_pose_weights
         old = {'idle': 0.15, 'walk': 0.12, 'follow_cursor': 0.03, 'sleep': 0.0, 'spell': 0.12,
                'tea': 0.1, 'greet': 0.06}
         folded = fold_pose_weights(old)
@@ -466,12 +466,12 @@ class Variety(unittest.TestCase):
         self.assertAlmostEqual(folded['idle'], 0.15 + 0.12 + 0.1 + 0.06)
         self.assertEqual((folded['walk'], folded['follow_cursor'], folded['sleep']), (0.12, 0.03, 0.0))
         qt_app()
-        from DyberPet.mia_director import MiaDirector
+        from DyberPet.companion_director import CompanionDirector
         kwargs = dict(get_available_poses=self.available, play_action=lambda pose: None,
                       is_busy=lambda: False, rng=random.Random(1), system_idle_fn=None, weights=old)
-        self.assertAlmostEqual(MiaDirector(idle_pool=self.pool(), **kwargs).weights['idle'], 0.43)
-        self.assertNotIn('spell', MiaDirector(idle_pool=self.pool(), **kwargs).weights)
-        self.assertEqual(MiaDirector(**kwargs).weights, old, 'without a role pool nothing changes')
+        self.assertAlmostEqual(CompanionDirector(idle_pool=self.pool(), **kwargs).weights['idle'], 0.43)
+        self.assertNotIn('spell', CompanionDirector(idle_pool=self.pool(), **kwargs).weights)
+        self.assertEqual(CompanionDirector(**kwargs).weights, old, 'without a role pool nothing changes')
 
     def test_the_random_animation_shares_the_varied_pool(self):
         qt_app()
@@ -535,14 +535,14 @@ class Tea(unittest.TestCase):
                 self.poses.append(pose)
                 self.interaction.interact, self.interaction.act_name = 'animat', pose
 
-            def _emit_mia_bubble(self, text, voice=None, wav=None):
+            def _emit_companion_bubble(self, text, voice=None, wav=None):
                 # Long enough for the emotion clip and then talk.
                 self._life_say_line(text, {'text': text, 'timeout': 10.0}, {'enabled': False})
 
-            def _mia_show_bubble(self, bubble):
+            def _companion_show_bubble(self, bubble):
                 pass
 
-            def _mia_log(self, kind, text):
+            def _companion_log(self, kind, text):
                 pass
         engine_state(self)
         return Pet(), clock
@@ -567,7 +567,7 @@ class Tea(unittest.TestCase):
 
     def test_chatter_context_says_she_is_sipping_her_tea(self):
         import datetime
-        from DyberPet.mia_director import _POSE_DESC, choose_chatter_prompt, pose_description
+        from DyberPet.companion_director import _POSE_DESC, choose_chatter_prompt, pose_description
         self.assertEqual(_POSE_DESC['tea'], 'you are sipping your tea')
         self.assertEqual(pose_description('tea'), 'you are sipping your tea')
         now = datetime.datetime(2026, 11, 6, 16, 0)
@@ -593,14 +593,14 @@ clock = Clock(); pet = Pet(centre_x=600)
 asked = []
 pet._conv_brain = object()
 pet._conv_event = lambda key, doing=None: asked.append([key, doing])
-pet._mia_schedule_chatter = lambda first=False: None
-pet.mia_chat_box = None
-pet.mia_director = SimpleNamespace(rng=random.Random(4), is_asleep=False)
+pet._companion_schedule_chatter = lambda first=False: None
+pet.companion_chat_box = None
+pet.companion_director = SimpleNamespace(rng=random.Random(4), is_asleep=False)
 pet.workers['Interaction'] = SimpleNamespace(interact='animat', act_name='tea')
-pet._mia_chatter()
+pet._companion_chatter()
 pet.workers['Interaction'] = SimpleNamespace(interact=None, act_name=None)
 settings.anim_act = conf.act_dict['tea']
-pet._mia_chatter()
+pet._companion_chatter()
 print(json.dumps({'asked': asked}))
 '''
 
@@ -649,8 +649,8 @@ def run_line(voiced_pauses=None, poke_at=None):
             pet._life_talk_tick()                        # the 40 ms talk timer
         if poke_at is not None and abs(clock.t - poke_at) < 0.0105:
             before = len(starts)
-            pet._mia_play_pose('happy')                  # director idle
-            pet._mia_play_pose('blink')                  # micro ticker
+            pet._companion_play_pose('happy')                  # director idle
+            pet._companion_play_pose('blink')                  # micro ticker
             pet.resume_animation()                       # random animation asks to resume
             blocked = {'starts': len(starts) - before, 'resumed': pet.workers['Animation'].resumed,
                        'fall_allowed': pet._life_pose_allowed_while_talking('fall', False),

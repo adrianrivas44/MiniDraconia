@@ -3,6 +3,7 @@ docs describe the protocol, manifest and settings the code really uses (checked 
 real client with a spy transport, never against hand-copied values).
 """
 import hashlib
+import importlib.util
 import json
 import random
 import re
@@ -12,6 +13,7 @@ import unittest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
+POLICY_FILE = REPO / 'full-engine' / 'packaging' / 'asset_policy.py'
 
 
 class Spy:
@@ -65,6 +67,27 @@ PRIVATE_WORDS_ALLOWED = {
 }
 
 
+def asset_policy():
+    spec = importlib.util.spec_from_file_location('asset_policy_d24_docs', POLICY_FILE)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def marker_hits(name, text, markers):
+    """`path` or `path:line` where a private marker (git-ignored markers file) appears in a
+    tracked file's path or text: plain lines as substrings, `word:<name>` lines as whole tokens
+    (asset_policy.find_name). The marker itself is never reported."""
+    policy = asset_policy()
+    hits = []
+    if policy.find_name(name, markers) >= 0:
+        hits.append(name)
+    position = policy.find_name(text, markers)
+    if position >= 0:
+        hits.append('%s:%d' % (name, text.count('\n', 0, position) + 1))
+    return hits
+
+
 def tree_files():
     """Tracked files (git work tree) or every file (a source export has only tracked files)."""
     inside = subprocess.run(['git', 'rev-parse', '--is-inside-work-tree'], cwd=str(REPO),
@@ -81,6 +104,8 @@ def tree_files():
 
 class PublicTreeNamesNoPrivateSetup(unittest.TestCase):
     def test_no_private_setup_word_in_any_text_file(self):
+        # Plus the maintainer's own markers, when the git-ignored file is present.
+        markers = asset_policy().load_other_product_names()
         hits = []
         for name in tree_files():
             path = REPO / name
@@ -93,6 +118,7 @@ class PublicTreeNamesNoPrivateSetup(unittest.TestCase):
             except OSError:
                 continue
             text = data.decode('utf-8', errors='replace')
+            hits.extend(marker_hits(name, text, markers))
             for match in PRIVATE_WORDS.finditer(text):
                 if (name, match.group(0).lower()) not in PRIVATE_WORDS_ALLOWED:
                     hits.append('%s:%d' % (name, text.count('\n', 0, match.start()) + 1))
@@ -214,10 +240,12 @@ class VoicePackDoc(unittest.TestCase):
 
 
 class ReleaseDocsForRc2(unittest.TestCase):
+    # REVISED (D2.5): the current version comes from VERSION; rc.2's own checklist stays.
     def test_readmes_name_rc2_the_latest_prerelease_and_the_three_modes(self):
         en, es = read('README.md'), read('README.es.md')
+        version = read('VERSION').strip()
         for text in (en, es):
-            self.assertIn('1.0.0-rc.2', text)
+            self.assertIn(version, text)
             self.assertNotIn('1.0.0-rc.1 until', text)
             self.assertNotIn('1.0.0-rc.1 hasta', text)
             for link in ('docs/CONNECT-YOUR-AI.md', 'docs/SELF-HOSTED-RELAY.md', 'docs/VOICE-PACK.md'):
@@ -232,7 +260,7 @@ class ReleaseDocsForRc2(unittest.TestCase):
 
     def test_release_notes_are_signed_and_bilingual(self):
         notes = read('RELEASE-NOTES.md')
-        self.assertIn('# MiniDraconia 1.0.0-rc.2', notes)
+        self.assertIn('# MiniDraconia %s' % read('VERSION').strip(), notes)
         self.assertGreaterEqual(notes.count('— Zero / adrianrivas44'), 1)
         self.assertIn('Mejoremos MiniDraconia juntos', notes)
         self.assertIn('self-hosted relay (advanced)', notes.lower())

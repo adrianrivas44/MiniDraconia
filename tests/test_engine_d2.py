@@ -6,15 +6,15 @@ from unittest.mock import patch
 
 class PeekEndNeverCutsAnotherClip(unittest.TestCase):
     def ticker(self, ctx):
-        from DyberPet.mia_director import MiaMicroTicker
+        from DyberPet.companion_director import CompanionMicroTicker
         self.played, self.now = [], [100.0]
-        return MiaMicroTicker(get_context=lambda: dict(ctx), play_action=self.played.append,
+        return CompanionMicroTicker(get_context=lambda: dict(ctx), play_action=self.played.append,
                               apply_cursor_flip=lambda mirror: None, on_edge=lambda side: None,
                               now_fn=lambda: self.now[0], rng=random.Random(1),
                               climb_cfg={'enabled': False})
 
     def start_peek(self, ticker, ctx):
-        with patch('DyberPet.mia_director.decide_edge_action', return_value='peek'):
+        with patch('DyberPet.companion_director.decide_edge_action', return_value='peek'):
             ctx.update(at_edge='right', state='default')
             ticker.tick()
         self.assertTrue(self.played and self.played[-1].startswith('peek'), self.played)

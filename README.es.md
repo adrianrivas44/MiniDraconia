@@ -2,7 +2,7 @@
 
 Una pequeña compañera de escritorio para Windows: camina, trepa los bordes de la pantalla en su escoba, reacciona al tacto y conversa con frases sin conexión o con tu propia IA si la conectas. Basada en [DyberPet](https://github.com/ChaozhongLiu/DyberPet).
 
-**Candidato 1.0.0-rc.2, la versión preliminar más reciente. Experimental, no es una versión estable.**
+**Candidato 1.0.0-rc.3, la versión preliminar más reciente. Experimental, no es una versión estable.**
 
 [English](README.md) · [Cómo colaborar](CONTRIBUTING.md) · [Alma y manual](docs/identity/README.md) · [Conecta tu propia IA](docs/CONNECT-YOUR-AI.md) · [Recomendaciones y pruebas](docs/RECOMMENDED-SETUP.md) (en inglés, con resumen en español)
 
@@ -16,7 +16,7 @@ MiniDraconia empezó como un proyecto personal. Es mi primera publicación de so
 
 ## Qué funciona y qué no
 
-La mascota se ve nítida con el escalado de la pantalla, camina de verdad por la pantalla (y mira hacia dónde va), sigue al cursor, trepa los bordes en su escoba, se sienta, lee y toma té. Nuevo en 1.0.0-rc.2: tres animaciones propias (**mirror**, su espejo; **quill**, escribe en su libreta; y **yawn**, bosteza antes de dormirse) y su propio icono para el ejecutable, su ventana, la bandeja y Settings. Admite un paquete de voz opcional que cualquiera puede grabar para sus frases guardadas ([voice pack](docs/VOICE-PACK.md), en inglés); no se incluye ninguno. Responde a zonas de tacto y arrastre, y mueve la boca mientras dice una frase. Tiene ajustes y permite salir desde su menú. Sus datos se guardan localmente, fuera de la carpeta de instalación. Los clips de voz tienen aprobación individual antes de poder reproducirse.
+La mascota se ve nítida con el escalado de la pantalla, camina de verdad por la pantalla (y mira hacia dónde va), sigue al cursor, trepa los bordes en su escoba, se sienta, lee y toma té. Nuevo en 1.0.0-rc.3: un servidor de modelos en tu propio equipo funciona igual de rápido con `localhost` que con `127.0.0.1`, tiene tiempo para cargar el modelo (la app lo calienta en segundo plano y ella se queda pensando mientras llega una respuesta lenta) y los prefijos `assistant>` o las etiquetas de emoción rotas de los modelos pequeños ya no llegan a su globo. Desde 1.0.0-rc.2: tres animaciones propias (**mirror**, su espejo; **quill**, escribe en su libreta; y **yawn**, bosteza antes de dormirse) y su propio icono para el ejecutable, su ventana, la bandeja y Settings. Admite un paquete de voz opcional que cualquiera puede grabar para sus frases guardadas ([voice pack](docs/VOICE-PACK.md), en inglés); no se incluye ninguno. Responde a zonas de tacto y arrastre, y mueve la boca mientras dice una frase. Tiene ajustes y permite salir desde su menú. Sus datos se guardan localmente, fuera de la carpeta de instalación. Los clips de voz tienen aprobación individual antes de poder reproducirse.
 
 No incluye modelo local ni servidor de inferencia. El alma describe su identidad; no activa memoria, cámara, micrófono ni herramientas.
 
@@ -36,7 +36,7 @@ Más detalles en [privacidad](docs/PRIVACY.md) (en inglés).
 
 ## Abrirla en Windows
 
-Descarga el ZIP de Windows de la [versión preliminar más reciente](https://github.com/adrianrivas44/MiniDraconia/releases) (1.0.0-rc.2), no el ZIP automático del código fuente. Es un candidato comunitario experimental, no una versión estable ni certificada. Extrae la carpeta completa y abre `MiniDraconia/MiniDraconia.exe`. No separes el ejecutable de `_internal`. El menú permite abrir Settings o Quit.
+Descarga el ZIP de Windows de la [versión preliminar más reciente](https://github.com/adrianrivas44/MiniDraconia/releases) (1.0.0-rc.3), no el ZIP automático del código fuente. Es un candidato comunitario experimental, no una versión estable ni certificada. Extrae la carpeta completa y abre `MiniDraconia/MiniDraconia.exe`. No separes el ejecutable de `_internal`. El menú permite abrir Settings o Quit.
 
 Objetivo inicial: Windows 11 x64. No se afirma compatibilidad probada con otros sistemas. No debería necesitar permisos de administrador. Si Windows muestra una advertencia de reputación de software sin firmar, revisa el origen y el checksum; no desactives el antivirus.
 

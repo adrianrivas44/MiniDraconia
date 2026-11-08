@@ -1,13 +1,13 @@
-"""Voz en ingles (Kokoro, Emma) para Mia en DyberPet.
+"""Voz en ingles (Kokoro, Emma) para la mascota en DyberPet.
 
-docs/contrato-voz-en.md: cuando `voice.enabled` es true, cada globo de Mia
+Cuando `voice.enabled` es true, cada globo de la mascota
 se lee en voz alta con Kokoro `bf_emma` (ingles britanico) y el idioma del
 cerebro local se fuerza a ingles. La voz es opcional (apagada por defecto).
 
 Este modulo contiene:
 - Funciones puras de config/idioma (testeables sin Qt ni Kokoro real).
 - `KokoroEngine`: carga perezosa del modelo onnx, sintesis a WAV temporal.
-- `VoiceWorker`/`MiaVoice`: hilo daemon + reproduccion con QSoundEffect, una
+- `VoiceWorker`/`CompanionVoice`: hilo daemon + reproduccion con QSoundEffect, una
   sola voz a la vez (la nueva corta la anterior). Si Kokoro falla: sin voz,
   sin excepcion, el globo normal sigue.
 """
@@ -32,7 +32,7 @@ except Exception:  # pragma: no cover - entorno sin Qt (no deberia pasar en runt
     QSoundEffect = None  # type: ignore
 
 
-BRAIN_CONFIG_NAME = "mia_brain.json"
+BRAIN_CONFIG_NAME = "companion_brain.json"
 
 DEFAULT_VOICE_CONFIG = {
     "enabled": False,
@@ -51,7 +51,7 @@ def default_voice_config() -> dict:
 
 
 def load_voice_config(brain_path) -> dict:
-    """Lee `voice` de mia_brain.json; se relee en cada frase (contrato,
+    """Lee `voice` de companion_brain.json; se relee en cada frase (contrato,
     seccion Tecnica). Si el archivo no existe o no trae `voice`, defaults."""
     cfg = default_voice_config()
     brain_path = Path(brain_path)
@@ -68,7 +68,7 @@ def load_voice_config(brain_path) -> dict:
 
 
 def load_language(brain_path) -> str:
-    """Lee `language` ("en"|"es") de mia_brain.json; default "es"."""
+    """Lee `language` ("en"|"es") de companion_brain.json; default "es"."""
     brain_path = Path(brain_path)
     if not brain_path.is_file():
         return DEFAULT_LANGUAGE
@@ -87,7 +87,7 @@ def effective_language(configured_language: str, voice_enabled: bool,
     """Punto 2 del contrato: con voz activada se fuerza el idioma de ESA voz.
 
     Correccion FAIL t_ea577267 (B1): antes se forzaba "en" a secas, lo que
-    convenia a Mia (su voz es bf_emma/en-gb) pero rompia a cualquier otro
+    convenia al perfil original (su voz es bf_emma/en-gb) pero rompia a cualquier otro
     perfil con voz propia en espanol (p. ej. ef_dora/es): hablaria en
     ingles aunque su voz sonara en espanol. `voice_lang` (p.ej.
     `voice_cfg["lang"]`, "en-gb"/"es") decide: empieza con "en" -> "en",
@@ -198,7 +198,7 @@ class KokoroEngine:
             )
             out_dir = Path(out_dir)
             out_dir.mkdir(parents=True, exist_ok=True)
-            out_path = out_dir / f"mia-voice-{uuid.uuid4().hex}.wav"
+            out_path = out_dir / f"voice-{uuid.uuid4().hex}.wav"
             sf.write(str(out_path), samples, sample_rate)
             return str(out_path)
         except Exception:
@@ -242,8 +242,7 @@ class QSoundEffectPlayer:
 
 
 class _SynthWorker(QObject if QObject is not object else object):
-    """Corre KokoroEngine.synth() en un hilo daemon (nunca en el hilo de UI,
-    contrato-voz-en.md seccion Tecnica)."""
+    """Corre KokoroEngine.synth() en un hilo daemon (nunca en el hilo de UI)."""
 
     done = Signal(str, object) if Signal is not None else None  # (wav_path|None, token)
 
@@ -266,7 +265,7 @@ class _SynthWorker(QObject if QObject is not object else object):
         self.done.emit(wav_path or "", self._token)
 
 
-class MiaVoice(QObject if QObject is not object else object):
+class CompanionVoice(QObject if QObject is not object else object):
     """Orquesta sintesis (hilo) + reproduccion (QSoundEffect), una sola voz
     a la vez: `speak()` de nuevo corta la reproduccion en curso y descarta
     cualquier sintesis vieja que termine tarde (token incremental). El WAV
@@ -295,7 +294,7 @@ class MiaVoice(QObject if QObject is not object else object):
     def speak(self, text: str, cfg: dict) -> None:
         if not cfg.get("enabled", False):
             return
-        # Mia: una sola voz a la vez; cortar lo que estuviera sonando y
+        # Una sola voz a la vez; cortar lo que estuviera sonando y
         # anular cualquier sintesis previa que llegue tarde.
         self._player.stop()
         self._cleanup_current_wav()
@@ -310,7 +309,7 @@ class MiaVoice(QObject if QObject is not object else object):
         worker.done.connect(self._on_synth_done)
         self._workers[token] = worker
         self._volume = cfg.get("volume", DEFAULT_VOICE_CONFIG["volume"])
-        threading.Thread(target=worker.run, name="mia-voice", daemon=True).start()
+        threading.Thread(target=worker.run, name="companion-voice", daemon=True).start()
 
     def _on_synth_done(self, wav_path: str, token: int) -> None:
         self._workers.pop(token, None)
@@ -368,7 +367,7 @@ class MiaVoice(QObject if QObject is not object else object):
     def notify_playback_finished(self) -> None:
         """Llamado cuando el reproductor termina (en runtime real via
         `on_finished` del adaptador QSoundEffectPlayer); borra el WAV
-        temporal (contrato-voz-en.md: 'se borra al terminar')."""
+        temporal (se borra al terminar)."""
         self._cleanup_current_wav()
 
     def _cleanup_current_wav(self) -> None:

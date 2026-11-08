@@ -542,29 +542,29 @@ class PetWiring(unittest.TestCase):
     def stub(self, brain):
         from DyberPet.pet_conversation import ConversationMixin
         from DyberPet.brain_client import BackgroundCalls
-        from DyberPet.mia_chat import ChatHistory
+        from DyberPet.companion_chat import ChatHistory
 
         class Stub(ConversationMixin):
             def __init__(self):
                 self.events, self.poses, self.logs, self.wavs = [], [], [], []
                 self._conv_brain = brain
                 self._conv_calls = BackgroundCalls()
-                self.mia_chat_history = ChatHistory()
+                self.companion_chat_history = ChatHistory()
 
-            def _emit_mia_bubble(self, text, voice=None, wav=None):
+            def _emit_companion_bubble(self, text, voice=None, wav=None):
                 self.events.append(('bubble', text, voice))
                 self.wavs.append(wav)
 
             def _life_begin_talk(self, pose):
                 self.poses.append(pose)
 
-            def _mia_play_pose(self, pose, **kwargs):
+            def _companion_play_pose(self, pose, **kwargs):
                 self.poses.append(pose)
 
-            def _mia_note_mood_event(self, kind, **meta):
+            def _companion_note_mood_event(self, kind, **meta):
                 pass
 
-            def _mia_log(self, kind, text):
+            def _companion_log(self, kind, text):
                 self.logs.append((kind, text))
         return Stub()
 
@@ -580,7 +580,7 @@ class PetWiring(unittest.TestCase):
         self.pump(stub, 1)
         self.assertEqual(stub.events, [('bubble', 'Splendid.', True)])
         self.assertEqual(stub.poses, ['think', 'happy'])
-        self.assertEqual(len(stub.mia_chat_history.as_list()), 2)
+        self.assertEqual(len(stub.companion_chat_history.as_list()), 2)
 
     def test_own_key_chat_is_text_only(self):
         stub = self.stub(make_brain(FakeTransport(completion('[shy] Stop it.')), own=OWN))
@@ -588,14 +588,14 @@ class PetWiring(unittest.TestCase):
         self.pump(stub, 1)
         self.assertEqual(stub.events, [('bubble', 'Stop it.', False)])
         self.assertEqual(stub.poses[-1], 'shy')
-        self.assertEqual(len(stub.mia_chat_history.as_list()), 2)
+        self.assertEqual(len(stub.companion_chat_history.as_list()), 2)
 
     def test_offline_chat_is_unvoiced_and_not_history(self):
         stub = self.stub(make_brain())
         stub._conv_chat('hello')
         self.assertEqual(len(stub.events), 1)
         self.assertFalse(stub.events[0][2])
-        self.assertEqual(stub.mia_chat_history.as_list(), [])
+        self.assertEqual(stub.companion_chat_history.as_list(), [])
         self.assertEqual(stub._conv_calls.pending(), 0)
 
     def test_a_failure_always_shows_an_offline_line(self):
@@ -633,9 +633,9 @@ class PetWiring(unittest.TestCase):
 
     def test_long_absence_triggers_the_idle_event(self):
         stub = self.stub(make_brain())
-        stub._mia_on_absence_return(60)
+        stub._companion_on_absence_return(60)
         self.assertEqual(stub.events, [])
-        stub._mia_on_absence_return(400)
+        stub._companion_on_absence_return(400)
         self.assertEqual(len(stub.events), 1)
 
     def test_logs_never_hold_the_text_the_key_or_the_token(self):
@@ -704,7 +704,15 @@ class SettingsPage(unittest.TestCase):
 
     def view(self, tester=None):
         from DyberPet.DyberSettings.AIPrivacyUI import AIPrivacyInterface
-        return AIPrivacyInterface(store=self.store, tester=tester or (lambda *a: (True, 'OK')))
+        return AIPrivacyInterface(store=self.store, tester=tester or (lambda *a: (True, 'OK')),
+                                  warmer=lambda settings: None)
+
+    def wait_for_test(self, view):
+        deadline = time.monotonic() + 5
+        while not view.test.isEnabled() and time.monotonic() < deadline:
+            self.app.processEvents()
+            time.sleep(0.01)
+        self.app.processEvents()
 
     def test_save_stores_the_key_encrypted_clears_the_field_and_shows_the_mode(self):
         from PySide6.QtWidgets import QLineEdit
@@ -738,8 +746,10 @@ class SettingsPage(unittest.TestCase):
         view.model.setText(OWN['model'])
         view.api_key.setText(OWN['api_key'])
         view.test.click()
+        self.wait_for_test(view)          # REVISED (D2.5): Test connection runs in the background
         self.assertEqual(view.status.text(), 'Connection OK.')
         view.test.click()
+        self.wait_for_test(view)
         self.assertIn('401', view.status.text())
         self.assertNotIn(OWN['api_key'], view.status.text())
         self.assertEqual(seen[0][1], OWN['api_key'])

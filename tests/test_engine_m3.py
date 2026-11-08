@@ -306,12 +306,12 @@ class RealWalking(unittest.TestCase):
 
 class ClimbingAndEdges(unittest.TestCase):
     def ticker(self, ctx, **kwargs):
-        from DyberPet.mia_director import MiaMicroTicker
+        from DyberPet.companion_director import CompanionMicroTicker
         self.clock = [100.0]
         self.played, self.events = [], []
         played = self.played
         kwargs.setdefault('climb_cfg', {'enabled': True, 'prob': 1.0, 'speed': 40.0, 'hold_s': [5.0, 5.0]})
-        return MiaMicroTicker(
+        return CompanionMicroTicker(
             get_context=lambda: dict(ctx),
             play_action=lambda pose: pose == 'blink' or played.append(pose),  # the role has no blink clip
             apply_cursor_flip=lambda flip: self.events.append(('flip', flip)),
@@ -324,7 +324,7 @@ class ClimbingAndEdges(unittest.TestCase):
             get_climb_speed=lambda: 22.5, handle_talk=False, **kwargs)
 
     def test_climbing_is_on_by_default_and_the_toggle_still_exists(self):
-        from DyberPet.mia_director import DEFAULT_CLIMB_CFG, load_climb_config
+        from DyberPet.companion_director import DEFAULT_CLIMB_CFG, load_climb_config
         self.assertTrue(DEFAULT_CLIMB_CFG['enabled'])
         with tempfile.TemporaryDirectory() as tmp:
             self.assertTrue(load_climb_config(Path(tmp) / 'missing.json')['enabled'])
@@ -334,11 +334,11 @@ class ClimbingAndEdges(unittest.TestCase):
         self.assertTrue(load_climb_config(ENGINE / 'data' / 'draconia_brain.json')['enabled'])
         pet = (ENGINE / 'DyberPet' / 'DyberPet.py').read_text(encoding='utf-8')
         visible = pet.split('self.StatMenu = RoundMenu(parent=self)', 1)[1].split('\n    def ', 1)[0]
-        self.assertIn('self.StatMenu.addActions([self.mia_climb_toggle])', visible,
+        self.assertIn('self.StatMenu.addActions([self.companion_climb_toggle])', visible,
                       'the Climb walls toggle is in the visible menu')
 
     def test_climb_speed_matches_the_frame_period(self):
-        from DyberPet.mia_director import climb_speed_px_s, frame_period_s
+        from DyberPet.companion_director import climb_speed_px_s, frame_period_s
         self.assertAlmostEqual(frame_period_s(1 / 12, 0.02), 0.1)    # a 20 ms tick shows 5 ticks
         self.assertAlmostEqual(frame_period_s(1 / 12, 0.021), 0.084)  # the 21 ms tick shows 4
         self.assertAlmostEqual(frame_period_s(1 / 24, 0.021), 0.042)
@@ -350,8 +350,8 @@ class ClimbingAndEdges(unittest.TestCase):
                'screen_top': 0.0, 'screen_height': 800.0,
                'available_poses': {'climb', 'climb_down', 'peek', 'fall', 'default'}}
         ticker = self.ticker(ctx)
-        with unittest.mock.patch('DyberPet.mia_director.climb_release_outcome', return_value='walk_down'), \
-                unittest.mock.patch('DyberPet.mia_director.climb_target_frac', return_value=0.2):
+        with unittest.mock.patch('DyberPet.companion_director.climb_release_outcome', return_value='walk_down'), \
+                unittest.mock.patch('DyberPet.companion_director.climb_target_frac', return_value=0.2):
             ticker.tick()
             self.assertEqual(self.played, ['climb'])
             self.assertIn(('snap', 'right'), self.events)
@@ -380,7 +380,7 @@ class ClimbingAndEdges(unittest.TestCase):
         ctx = {'state': 'default', 'at_edge': 'left', 'pos_y': 300.0, 'floor_y': 300.0,
                'screen_top': 0.0, 'screen_height': 800.0, 'available_poses': {'climb', 'fall'}}
         ticker = self.ticker(ctx)
-        with unittest.mock.patch('DyberPet.mia_director.climb_target_frac', return_value=0.85):
+        with unittest.mock.patch('DyberPet.companion_director.climb_target_frac', return_value=0.85):
             ticker.tick()
             self.assertEqual(self.played, ['climb'])
             self.assertIn(('flip', True), self.events, 'left wall: her climb art is mirrored')
@@ -391,7 +391,7 @@ class ClimbingAndEdges(unittest.TestCase):
         self.assertFalse(ticker.is_climbing)
 
     def test_peek_with_her_sprites(self):
-        from DyberPet.mia_director import peek_pose_for_side
+        from DyberPet.companion_director import peek_pose_for_side
         acts = act_conf()
         self.assertEqual(acts['peek']['images'], 'peek_right')
         self.assertEqual(peek_pose_for_side('right', set(acts)), ('peek', False))
@@ -514,7 +514,7 @@ class VisiblyTalking(unittest.TestCase):
 
 class TalkWiring(unittest.TestCase):
     """The pet's life/conversation methods on a stub: every line (chat, events, chatter) goes
-    through `_emit_mia_bubble` -> `talk_controller.say` and the reply's emotion becomes the
+    through `_emit_companion_bubble` -> `talk_controller.say` and the reply's emotion becomes the
     talk's pose."""
 
     def setUp(self):
@@ -553,18 +553,18 @@ class TalkWiring(unittest.TestCase):
                 self.poses, self.bubbles = [], []
                 self.workers = {'Interaction': Interaction(), 'Animation': Animation()}
                 # The emotion clip's real length comes from the role (angry: 49 frames at 12 fps).
-                self.talk_controller = TalkController(self._mia_play_pose, self._life_talk_stop, now_fn=clock,
+                self.talk_controller = TalkController(self._companion_play_pose, self._life_talk_stop, now_fn=clock,
                                                       clip_s=clip_seconds)
 
-            def _emit_mia_bubble(self, text, voice=None, wav=None):
+            def _emit_companion_bubble(self, text, voice=None, wav=None):
                 self.bubbles.append((text, voice))
                 self.talk_controller.say(line_s, voiced=bool(voice))
 
-            def _mia_play_pose(self, pose, **kwargs):
+            def _companion_play_pose(self, pose, **kwargs):
                 self.poses.append(pose)
                 self.workers['Interaction'].interact, self.workers['Interaction'].act_name = 'animat', pose
 
-            def _mia_log(self, kind, text):
+            def _companion_log(self, kind, text):
                 pass
         return Stub(), clock
 
@@ -610,7 +610,7 @@ class TalkWiring(unittest.TestCase):
     def test_pet_window_feeds_the_controller(self):
         pet = (ENGINE / 'DyberPet' / 'DyberPet.py').read_text(encoding='utf-8')
         self.assertIn('self._life_say_line(text, bubble_dict, voice_cfg, wav=wav if pack_voice else None)', pet)
-        self.assertIn('self.mia_voice.on_started = self._life_voice_started', pet)
+        self.assertIn('self.companion_voice.on_started = self._life_voice_started', pet)
         self.assertIn('on_release=self._life_release_line', pet)
         self.assertIn('clip_s=self._life_clip_s', pet)
         self.assertIn('self.talk_timer.timeout.connect(self._life_talk_tick)', pet)   # 40 ms
@@ -620,7 +620,7 @@ class TalkWiring(unittest.TestCase):
 class VoiceDurationHook(unittest.TestCase):
     def test_voice_reports_the_wav_duration_when_playback_starts(self):
         qt_app()
-        from DyberPet.mia_voice import MiaVoice, wav_seconds
+        from DyberPet.companion_voice import CompanionVoice, wav_seconds
 
         class Player:
             def __init__(self):
@@ -642,7 +642,7 @@ class VoiceDurationHook(unittest.TestCase):
             self.assertAlmostEqual(wav_seconds(path), 2.5)
             self.assertEqual(wav_seconds(Path(tmp) / 'missing.wav'), 0.0)
             started, failed = [], []
-            voice = MiaVoice(engine=None, player=Player(), tmp_dir=tmp)
+            voice = CompanionVoice(engine=None, player=Player(), tmp_dir=tmp)
             voice.on_started, voice.on_failed = started.append, lambda: failed.append(True)
             voice._volume = 0.5
             voice._token = 3

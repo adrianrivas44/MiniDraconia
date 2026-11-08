@@ -6,11 +6,11 @@ so they can be exercised without starting the pet (DyberPet.py itself needs a de
 pynput). Where her lines come from (offline, own AI, self-hosted relay) lives in
 `DyberPet/pet_conversation.py`.
 
-Pet attributes used: _emit_mia_bubble(text, voice, wav), _mia_show_bubble(bubble_dict),
-_mia_play_pose(pose), _mia_log(kind, text) and, when present, talk_controller, mia_voice,
-frame_store, pet_conf, workers, label, mia_micro_ticker, current_screen.
+Pet attributes used: _emit_companion_bubble(text, voice, wav), _companion_show_bubble(bubble_dict),
+_companion_play_pose(pose), _companion_log(kind, text) and, when present, talk_controller, companion_voice,
+frame_store, pet_conf, workers, label, companion_micro_ticker, current_screen.
 
-Diagnostics written to the pet's local log (data/mia_talk.log), English and compact:
+Diagnostics written to the pet's local log (data/talk.log), English and compact:
 `screen <geometry> dpr=<x> scale=<pet_display_scale>` once at start and
 `walk end <pose> dx=<px> frames=<n> clamped=<n>` once per walk.
 """
@@ -43,7 +43,7 @@ class PetLifeMixin:
             self._life_finish_clip()     # M3.3: the clip playing now ends first, not mid-way
         if voiced and talk is not None:
             self._life_held_bubble = bubble_dict
-            self._mia_chat_bubble_visible = True        # a line is in progress
+            self._companion_chat_bubble_visible = True        # a line is in progress
             talk.wait_for_voice(bubble_dict['timeout'])
             self._life_speak(text, voice_cfg, wav)
             return
@@ -51,21 +51,21 @@ class PetLifeMixin:
             # This line replaces one still waiting for its voice: that voice must not play now.
             self._life_held_bubble = None
             self._life_cancel_voice()
-        self._mia_show_bubble(bubble_dict)
+        self._companion_show_bubble(bubble_dict)
         if talk is not None:
             talk.say(bubble_dict['timeout'], voiced=False)
         elif voiced:
             self._life_speak(text, voice_cfg, wav)
 
     def _life_speak(self, text: str, voice_cfg: dict, wav: Optional[str] = None) -> None:
-        """The line's voice, both through MiaVoice: its recorded pack WAV, or the relay's."""
+        """The line's voice, both through CompanionVoice: its recorded pack WAV, or the relay's."""
         if wav:
             import os
-            self._mia_log('voice', 'stored ' + os.path.basename(str(wav)))
-            self.mia_voice.play_stored(wav, cfg=voice_cfg)
+            self._companion_log('voice', 'stored ' + os.path.basename(str(wav)))
+            self.companion_voice.play_stored(wav, cfg=voice_cfg)
         else:
-            self.mia_voice.speak(text, cfg=voice_cfg)
-            self._mia_log('voice', 'requested')
+            self.companion_voice.speak(text, cfg=voice_cfg)
+            self._companion_log('voice', 'requested')
 
     def _life_release_line(self, voiced: bool) -> None:
         """TalkController: the wait for the voice is over (it started, failed or took too long)."""
@@ -73,12 +73,12 @@ class PetLifeMixin:
         self._life_held_bubble = None
         if not voiced:
             self._life_cancel_voice()                   # a late voice would be out of sync
-            self._mia_log('voice', 'not in time')
+            self._companion_log('voice', 'not in time')
         if bubble is not None:
-            self._mia_show_bubble(bubble)
+            self._companion_show_bubble(bubble)
 
     def _life_cancel_voice(self) -> None:
-        voice = getattr(self, 'mia_voice', None)
+        voice = getattr(self, 'companion_voice', None)
         cancel = getattr(voice, 'cancel', None)
         if cancel is not None:
             try:
@@ -87,12 +87,12 @@ class PetLifeMixin:
                 logging.getLogger(__name__).exception('voice cancel failed (ignored)')
 
     def _life_voice_started(self, duration_s: float) -> None:
-        """MiaVoice: the WAV started playing. Mouth pauses come from its RMS envelope."""
+        """CompanionVoice: the WAV started playing. Mouth pauses come from its RMS envelope."""
         talk = getattr(self, 'talk_controller', None)
         if talk is None:
             return
         from DyberPet.talk_controller import wav_mouth_pauses
-        wav = getattr(getattr(self, 'mia_voice', None), 'current_wav', None)
+        wav = getattr(getattr(self, 'companion_voice', None), 'current_wav', None)
         pauses = wav_mouth_pauses(wav) if wav else []
         was_active = talk.active
         if not was_active:
@@ -108,13 +108,13 @@ class PetLifeMixin:
         if talk is not None and talk.active:
             talk.set_pose(pose)
         elif pose:
-            self._mia_play_pose(pose)
+            self._companion_play_pose(pose)
 
     def _life_talk_play(self, pose: str) -> None:
         """TalkController's clips. `talk` and the closed-mouth pause loop in the engine for as long as
         the line lasts (M3.2: one seamless animation, never restarted at the clip's end)."""
         from DyberPet.talk_controller import LOOP_POSES
-        self._mia_play_pose(pose, loop=pose in LOOP_POSES, from_talk=True)
+        self._companion_play_pose(pose, loop=pose in LOOP_POSES, from_talk=True)
 
     def _life_line_active(self) -> bool:
         return bool(getattr(getattr(self, 'talk_controller', None), 'active', False))
@@ -133,7 +133,7 @@ class PetLifeMixin:
     def _life_talk_blocked(self) -> bool:
         """Never interrupt drag, fall or a wall climb."""
         interaction = getattr(self, 'workers', {}).get('Interaction')
-        climbing = bool(getattr(getattr(self, 'mia_micro_ticker', None), 'is_climbing', False))
+        climbing = bool(getattr(getattr(self, 'companion_micro_ticker', None), 'is_climbing', False))
         return (settings.draging == 1 or not settings.onfloor or climbing
                 or getattr(interaction, 'interact', None) == 'mousedrag')
 
@@ -259,7 +259,7 @@ class PetLifeMixin:
 
     def _life_clip_start_frame(self, pose: str) -> int:
         """climb_down starts on the frame she holds (it is the climb clip backwards): no jump."""
-        from DyberPet.mia_director import CLIMB_DOWN_POSE
+        from DyberPet.companion_director import CLIMB_DOWN_POSE
         act = getattr(settings, 'current_act', None)
         if pose != CLIMB_DOWN_POSE or getattr(act, 'act_name', None) != 'climb':
             return 0
@@ -304,7 +304,7 @@ class PetLifeMixin:
     # --- D2.3: a random walk never heads into the wall she is already touching ----------------
     def _life_room_now(self):
         """{'left': px, 'right': px} she can walk on her current screen from where she stands."""
-        from DyberPet.mia_director import walk_room
+        from DyberPet.companion_director import walk_room
         screen = getattr(self, 'current_screen', None)
         if screen is None:
             return None
@@ -323,7 +323,7 @@ class PetLifeMixin:
     def _life_walk_room(self):
         """(room, need) for the director's random walk: her room toward each side and one full
         walk that way at the current display scale. None if her screen is not known yet."""
-        from DyberPet.mia_director import walk_distance
+        from DyberPet.companion_director import walk_distance
         room = self._life_room_now()
         if room is None:
             return None
@@ -338,7 +338,7 @@ class PetLifeMixin:
         side = self._life_wall_side()
         if side and pose.startswith(side):
             turned = ('right' if side == 'left' else 'left') + '_walk'
-            self._mia_log('walk', 'turn %s -> %s (wall %s)' % (pose, turned, side))
+            self._companion_log('walk', 'turn %s -> %s (wall %s)' % (pose, turned, side))
             return turned
         return pose
 
@@ -383,7 +383,7 @@ class PetLifeMixin:
             return
         line = tracker.end()
         if line:
-            self._mia_log('walk', line)
+            self._companion_log('walk', line)
 
     def _life_anim_walk_done(self) -> None:
         """The random animation's walk clip ended (or was cut)."""
@@ -397,8 +397,8 @@ class PetLifeMixin:
             if source == 'inter':
                 interaction = workers.get('Interaction')
                 if getattr(interaction, 'interact', None) == 'followTarget' \
-                        and hasattr(self, '_mia_stop_follow_cursor'):
-                    self._mia_stop_follow_cursor()
+                        and hasattr(self, '_companion_stop_follow_cursor'):
+                    self._companion_stop_follow_cursor()
                 elif interaction is not None:
                     interaction.stop_interact()
             elif 'Animation' in workers:
@@ -410,14 +410,14 @@ class PetLifeMixin:
         """One start line: `screen <geometry> dpr=<x> scale=<pet_display_scale>`."""
         try:
             screen = self.current_screen
-            self._mia_log('screen', '%d,%d %dx%d dpr=%.2f scale=%.3f' % (
+            self._companion_log('screen', '%d,%d %dx%d dpr=%.2f scale=%.3f' % (
                 screen.x(), screen.y(), screen.width(), screen.height(), self.devicePixelRatioF(),
                 float(getattr(settings, 'pet_display_scale', 1.0))))
         except Exception:
             logging.getLogger(__name__).exception('_life_log_screen failed (ignored)')
 
     def _life_holds_animation(self) -> bool:
-        climbing = bool(getattr(getattr(self, 'mia_micro_ticker', None), 'is_climbing', False))
+        climbing = bool(getattr(getattr(self, 'companion_micro_ticker', None), 'is_climbing', False))
         talking = bool(getattr(getattr(self, 'talk_controller', None), 'active', False))
         return climbing or talking
 
@@ -483,7 +483,7 @@ class PetLifeMixin:
         the random pool (settings.act_data, from pet_conf.json) never lists it; only the
         climb director plays it, by name."""
         from DyberPet.conf import Act
-        from DyberPet.mia_director import CLIMB_DOWN_POSE
+        from DyberPet.companion_director import CLIMB_DOWN_POSE
         conf = self.pet_conf
         climb = conf.act_dict.get('climb')
         if climb is None or CLIMB_DOWN_POSE in conf.act_dict:
@@ -498,7 +498,7 @@ class PetLifeMixin:
         conf.act_prob.append(0.0)
 
     def _life_climb_speed(self) -> float:
-        from DyberPet.mia_director import climb_speed_px_s
+        from DyberPet.companion_director import climb_speed_px_s
         climb = self.pet_conf.act_dict.get('climb')
         if climb is None:
             return 0.0

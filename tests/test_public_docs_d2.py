@@ -9,10 +9,11 @@ class PublicDocs(unittest.TestCase):
     def read(self, name):
         return (REPO / name).read_text(encoding='utf-8')
 
-    def test_version_is_rc2(self):
-        self.assertEqual(self.read('VERSION').strip(), '1.0.0-rc.2')
-        self.assertIn('1.0.0-rc.2', self.read('CHANGELOG.md'))
-        self.assertIn('1.0.0-rc.2', self.read('RELEASE-NOTES.md'))
+    def test_docs_name_the_current_version(self):
+        # REVISED (D2.5): driven by VERSION, not a literal.
+        version = self.read('VERSION').strip()
+        self.assertIn('## %s' % version, self.read('CHANGELOG.md'))
+        self.assertIn('# MiniDraconia %s' % version, self.read('RELEASE-NOTES.md'))
 
     def test_talking_sections_say_offline_default_own_key_and_what_is_sent(self):
         en, es = self.read('README.md'), self.read('README.es.md')

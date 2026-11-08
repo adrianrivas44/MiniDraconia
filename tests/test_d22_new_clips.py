@@ -5,8 +5,8 @@ me gustó más". Each new clip is 73 frames of 515x460 RGBA at 12 fps, starting 
 to her stand_0 pose. mirror and quill join her idle pool; yawn plays once, complete, whenever she
 falls asleep (yawn -> doze -> sleep).
 
-The pet contracts run the real `Interaction_worker`, `PetWidget._mia_play_pose`,
-`PetWidget._mia_micro_context`, `MiaDirector`, `MiaMicroTicker`, the life mixin and the
+The pet contracts run the real `Interaction_worker`, `PetWidget._companion_play_pose`,
+`PetWidget._companion_micro_context`, `CompanionDirector`, `CompanionMicroTicker`, the life mixin and the
 `TalkController` on the M3.3 stand-in window, in a fresh interpreter with one injected clock.
 Standard library unittest + PySide6, no network. No test reads source text.
 """
@@ -182,18 +182,18 @@ class IdleVariety(unittest.TestCase):
         return set(act_conf()) | {'climb_down'}
 
     def pool(self):
-        from DyberPet.mia_director import load_role_idle_poses
+        from DyberPet.companion_director import load_role_idle_poses
         return load_role_idle_poses(ROLE / 'pet_conf.json')
 
     def moods(self):
-        from DyberPet.mia_director import load_mood_table
+        from DyberPet.companion_director import load_mood_table
         return load_mood_table(BRAIN)
 
     def director(self, seed, dominant=None):
         qt_app()
-        from DyberPet.mia_director import MiaDirector
+        from DyberPet.companion_director import CompanionDirector
         played = []
-        director = MiaDirector(get_available_poses=self.available, play_action=played.append,
+        director = CompanionDirector(get_available_poses=self.available, play_action=played.append,
                                is_busy=lambda: False, rng=random.Random(seed), system_idle_fn=None,
                                idle_pool=self.pool(), mood_table=self.moods() if dominant else None,
                                get_dominant_mood=(lambda: dominant) if dominant else None)
@@ -228,7 +228,7 @@ class IdleVariety(unittest.TestCase):
 
     def pick_share(self, dominant, pose, draws=6000):
         """The mood weighting alone: her pool and mood table, no recent poses."""
-        from DyberPet.mia_director import choose_fresh_idle_pose
+        from DyberPet.companion_director import choose_fresh_idle_pose
         rng, pool, table, available = random.Random(3), self.pool(), self.moods(), self.available()
         picks = [choose_fresh_idle_pose(rng, pool, (), available, dominant, table) for _ in range(draws)]
         return picks.count(pose) / float(draws)
@@ -249,7 +249,7 @@ class IdleVariety(unittest.TestCase):
         self.assertGreater(self.share('content', 'quill'), self.share('happy', 'quill'))
 
     def test_an_older_profile_gets_the_bundled_mood_entries_for_the_new_clips(self):
-        from DyberPet.mia_director import merge_mood_tables
+        from DyberPet.companion_director import merge_mood_tables
         bundled = self.moods()
         old = {k: v for k, v in bundled.items() if k not in ('mirror', 'quill')}
         old['tea'] = {'content': 9.0}                    # the user's own edit
@@ -286,11 +286,11 @@ class IdleVariety(unittest.TestCase):
 # --- 3. Yawn before sleep, proven on the injected clock ---------------------------------------------
 
 SLEEP_RIG = RIG + '''
-from DyberPet.mia_director import MiaDirector, MiaMicroTicker
+from DyberPet.companion_director import CompanionDirector, CompanionMicroTicker
 
 class SleepPet(Pet):
-    _mia_micro_context = PetWidget._mia_micro_context
-    _mia_available_poses = PetWidget._mia_available_poses
+    _companion_micro_context = PetWidget._companion_micro_context
+    _companion_available_poses = PetWidget._companion_available_poses
 
 def sleep_rig(weights, sleep_after_s=300.0):
     """The real pet path, director and micro ticker on one clock. The director ticks only when a
@@ -303,14 +303,14 @@ def sleep_rig(weights, sleep_after_s=300.0):
         Pet = plain
     pet = r.pet
     r.log = []
-    r.director = MiaDirector(
-        get_available_poses=pet._mia_available_poses, play_action=pet._mia_play_pose,
+    r.director = CompanionDirector(
+        get_available_poses=pet._companion_available_poses, play_action=pet._companion_play_pose,
         is_busy=lambda: settings.draging == 1 or pet._life_holds_animation(),
         weights=weights, sleep_after_s=sleep_after_s, rng=random.Random(4), system_idle_fn=None,
         now_fn=r.clock, on_log=r.log.append, nap_warmup_s=0.0, nap_quiet_s=0.0,
         nap_min_mean_interval_s=1e-6)
-    pet.mia_director = r.director
-    r.ticker = MiaMicroTicker(get_context=pet._mia_micro_context, play_action=pet._mia_play_pose,
+    pet.companion_director = r.director
+    r.ticker = CompanionMicroTicker(get_context=pet._companion_micro_context, play_action=pet._companion_play_pose,
                               apply_cursor_flip=lambda flip: None, on_edge=lambda side: None,
                               now_fn=r.clock, rng=random.Random(5), climb_cfg={'enabled': False},
                               handle_talk=False,
@@ -469,7 +469,7 @@ class YawnBeforeSleep(unittest.TestCase):
 
 class SleepStages(unittest.TestCase):
     def test_first_and_next_stage(self):
-        from DyberPet.mia_director import first_sleep_stage, next_sleep_stage
+        from DyberPet.companion_director import first_sleep_stage, next_sleep_stage
         hers = {'yawn', 'doze', 'sleep'}
         self.assertEqual(first_sleep_stage(hers), 'yawn')
         self.assertEqual(first_sleep_stage(hers, dragging=True), 'doze')
@@ -489,7 +489,7 @@ LINES_RIG = RIG + '''
 out = {}
 def clip_then(pose, line_at, until):
     r = Rig()
-    r.pet._mia_play_pose(pose)
+    r.pet._companion_play_pose(pose)
     r.run(until, at=[(line_at, lambda: r.line(12.0))])
     return r.result()
 
@@ -499,7 +499,7 @@ for pose in ('mirror', 'quill', 'yawn'):
 
 # Plain playback: 12 fps from the start of the clip.
 r = Rig()
-r.pet._mia_play_pose('quill')
+r.pet._companion_play_pose('quill')
 r.run(7.0)
 out['plain'] = r.result()
 

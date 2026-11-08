@@ -73,6 +73,16 @@ def brain(own, transport):
                                   prompt_loader=lambda: 'SOUL', sleep=lambda s: None)
 
 
+def wait_for_test(app, view, seconds=5.0):
+    """D2.5: Test connection runs in the background; wait until its result is shown."""
+    import time
+    deadline = time.monotonic() + seconds
+    while not view.test.isEnabled() and time.monotonic() < deadline:
+        app.processEvents()
+        time.sleep(0.01)
+    app.processEvents()
+
+
 def load_scanner():
     spec = importlib.util.spec_from_file_location('scan_release_d24', SCAN_SCRIPT)
     module = importlib.util.module_from_spec(spec)
@@ -168,7 +178,8 @@ class SettingsRefuseEmptyFields(ProfileCase):
     def view(self, store=None):
         from DyberPet.DyberSettings.AIPrivacyUI import AIPrivacyInterface
         return AIPrivacyInterface(store=store or self.store,
-                                  tester=lambda *a: (self.requests.append(a), (True, 'OK'))[1])
+                                  tester=lambda *a: (self.requests.append(a), (True, 'OK'))[1],
+                                  warmer=lambda settings: self.fail('no warm-up here'))
 
     def test_fields_start_empty_with_neutral_placeholders(self):
         view = self.view()
@@ -190,6 +201,7 @@ class SettingsRefuseEmptyFields(ProfileCase):
         self.assertNotIn(KEY, view.status.text())
         view.model.setText('vendor/m')
         view.test.click()
+        wait_for_test(self.app, view)     # REVISED (D2.5): Test connection runs in the background
         self.assertEqual(self.requests, [(HOSTED, KEY, 'vendor/m')])
         self.assertEqual(view.status.text(), 'Connection OK.')
         view.close()
@@ -243,7 +255,8 @@ class LocalServersAndKeys(unittest.TestCase):
         self.assertEqual(b.plan('chat'), 'remote')
         reply = b.remote_chat('hello')
         self.assertEqual((reply.source, reply.text), ('own_key', 'Fine.'))
-        self.assertEqual(spy.calls[0]['url'], 'http://localhost:11434/v1/chat/completions')
+        # REVISED (D2.5): a `localhost` base URL connects to 127.0.0.1 (IPv6 ::1 was slow on Windows).
+        self.assertEqual(spy.calls[0]['url'], 'http://127.0.0.1:11434/v1/chat/completions')
         self.assertIsNone(spy.calls[0]['auth'])
         self.assertEqual(spy.calls[0]['body']['model'], 'local/model')
 
@@ -280,7 +293,8 @@ class LocalServersAndKeys(unittest.TestCase):
         spy = Spy({'choices': [{'message': {'content': 'OK'}}]})
         self.assertEqual(bc().test_own_key('http://localhost:1234/v1', '', 'local/m', spy), (True, 'OK'))
         self.assertIsNone(spy.calls[0]['auth'])
-        self.assertEqual(spy.calls[0]['url'], 'http://localhost:1234/v1/chat/completions')
+        # REVISED (D2.5): a `localhost` base URL connects to 127.0.0.1.
+        self.assertEqual(spy.calls[0]['url'], 'http://127.0.0.1:1234/v1/chat/completions')
 
 
 class SettingsForLocalServers(ProfileCase):
@@ -292,7 +306,10 @@ class SettingsForLocalServers(ProfileCase):
 
     def view(self, store):
         from DyberPet.DyberSettings.AIPrivacyUI import AIPrivacyInterface
-        return AIPrivacyInterface(store=store, tester=lambda *a: (self.requests.append(a), (True, 'OK'))[1])
+        # D2.5: saving a local server warms it up; the spy keeps the tests off the network.
+        self.warmed = []
+        return AIPrivacyInterface(store=store, tester=lambda *a: (self.requests.append(a), (True, 'OK'))[1],
+                                  warmer=lambda settings: self.warmed.append(settings) or 'ok')
 
     def test_a_local_server_is_saved_without_a_key_even_without_encryption(self):
         from DyberPet.brain import load_config, load_own_key
@@ -300,6 +317,7 @@ class SettingsForLocalServers(ProfileCase):
         view.endpoint.setText('http://localhost:11434/v1')
         view.model.setText('local/model')
         view.test.click()
+        wait_for_test(self.app, view)     # REVISED (D2.5): Test connection runs in the background
         self.assertEqual(self.requests, [('http://localhost:11434/v1', '', 'local/model')])
         with patch('DyberPet.DyberSettings.AIPrivacyUI.active_mode', return_value='own_key'):
             view.save.click()

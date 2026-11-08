@@ -13,7 +13,10 @@ Private markers: the scanner knows only generic private paths (Windows `X:\\User
 account names as literal markers, one per line, in an untracked, git-ignored file
 `.release-private-markers` at the repository root (read when present), or pass
 `--private-markers FILE`. Blank lines and lines starting with `#` are ignored; matching is
-case-insensitive. A marker found in a tree file is a blocking `private-marker` finding; the
+case-insensitive. A line `word:<name>` matches <name> only as a whole token (bounded by any
+non-letter: `_`, digits and punctuation are boundaries), so a longer word that merely contains
+the name never matches; a plain line matches as a substring. The parser and the matcher are
+the ones in full-engine/packaging/asset_policy.py. A marker found in a tree file is a blocking `private-marker` finding; the
 marker text itself is never printed. The markers file at the scanned root is not scanned.
 
 Buckets in the report:
@@ -64,20 +67,10 @@ DEFAULT_MARKERS_FILE = Path(__file__).resolve().parents[1]/MARKERS_NAME
 
 
 def load_private_markers(path):
-    """Literal markers (lower-cased bytes), one per line; [] when the file is absent.
-    Blank lines and `#` comments are ignored."""
-    try:
-        text = Path(path).read_text(encoding='utf-8')
-    except FileNotFoundError:
-        return []
-    markers = []
-    for line in text.splitlines():
-        line = line.strip()
-        if line and not line.startswith('#'):
-            marker = line.encode('utf-8').lower()
-            if marker not in markers:
-                markers.append(marker)
-    return markers
+    """Markers (case-folded UTF-8 bytes), one per line; [] when the file is absent.
+    Blank lines and `#` comments are ignored; a `word:<name>` line stays a whole-token marker.
+    Parsed by asset_policy.load_other_product_names, the one parser for this file."""
+    return [name.encode('utf-8') for name in _asset_policy().load_other_product_names(path)]
 
 
 ASSET_POLICY_FILE = Path(__file__).resolve().parents[1]/'full-engine'/'packaging'/'asset_policy.py'
@@ -87,7 +80,12 @@ def _asset_policy():
     """Shared public-asset policy (unapproved voice clips, inherited pet folder); missing file is a hard error."""
     spec = importlib.util.spec_from_file_location('minidraconia_asset_policy', ASSET_POLICY_FILE)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # Loading the policy must not write a .pyc into the tree the scanner is about to judge.
+    previous, sys.dont_write_bytecode = sys.dont_write_bytecode, True
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.dont_write_bytecode = previous
     return module
 
 
@@ -128,7 +126,7 @@ def _legal_key(relative):
 def scan_tree(root, allow=None, max_bytes=MAX_BYTES, markers=()):
     """`markers`: extra private literals (bytes or str, see load_private_markers)."""
     allow = DEFAULT_ALLOW if allow is None else allow
-    markers = [m.encode('utf-8').lower() if isinstance(m, str) else bytes(m).lower() for m in markers if m]
+    markers = [(m if isinstance(m, str) else bytes(m).decode('utf-8')).casefold() for m in markers if m]
     root = Path(root)
     report = _blank_report()
     policy = _asset_policy()
@@ -173,21 +171,19 @@ def scan_tree(root, allow=None, max_bytes=MAX_BYTES, markers=()):
                     if match:
                         _add(report, 'findings', rule, relative, allow, line=data.count(b'\n', 0, match.start()) + 1)
                 # Another private product built on this engine must not leak into the public tree.
-                low_data = data.lower()
-                found = [low_data.find(name.encode('utf-8')) for name in getattr(policy, 'OTHER_PRODUCT_NAMES', ())]
-                found = [i for i in found if i >= 0]
-                position = min(found) if found else -1
+                # Same whole-token / substring match as the path rule (asset_policy.find_name).
+                text = data.decode('utf-8', errors='replace')
+                position = policy.find_name(text, getattr(policy, 'OTHER_PRODUCT_NAMES', ()))
                 if position >= 0:
-                    _add(report, 'findings', 'other-product-input', relative, allow, line=data.count(b'\n', 0, position) + 1)
+                    _add(report, 'findings', 'other-product-input', relative, allow, line=text.count('\n', 0, position) + 1)
                 match = PRIVATE_PATH.search(data)
                 if match:
                     _add(report, 'review', 'private-path', relative, line=data.count(b'\n', 0, match.start()) + 1)
                 if markers:
-                    low = data.lower()
-                    hits = [i for i in (low.find(m) for m in markers) if i >= 0]
-                    if hits:
+                    position = policy.find_name(text, markers)
+                    if position >= 0:
                         _add(report, 'findings', 'private-marker', relative, allow,
-                             line=data.count(b'\n', 0, min(hits)) + 1)
+                             line=text.count('\n', 0, position) + 1)
     return report
 
 

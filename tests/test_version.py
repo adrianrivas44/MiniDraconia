@@ -12,15 +12,22 @@ if str(ENGINE) not in sys.path:
     sys.path.insert(0, str(ENGINE))
 
 SEMVER = re.compile(r'^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$')
+RELEASE_CANDIDATE = re.compile(r'^\d+\.\d+\.\d+-rc\.\d+$')
+
+
+def version_file():
+    return (REPO / 'VERSION').read_text(encoding='utf-8').strip()
 
 
 class VersionFile(unittest.TestCase):
-    def test_version_file_is_the_release_candidate(self):
-        self.assertEqual((REPO / 'VERSION').read_text(encoding='utf-8').strip(), '1.0.0-rc.2')
+    # REVISED (D2.5): VERSION-driven consistency instead of a literal in every test; the one
+    # literal of the cut lives in its release test (tests/test_d25_release.py).
+    def test_version_file_is_a_release_candidate(self):
+        self.assertRegex(version_file(), RELEASE_CANDIDATE)
 
     def test_reader_returns_the_file_content(self):
         from DyberPet.version import read_version
-        self.assertEqual(read_version(), '1.0.0-rc.2')
+        self.assertEqual(read_version(), version_file())
 
     def test_reader_prefers_resource_root_then_parent(self):
         from DyberPet.version import read_version
@@ -52,7 +59,7 @@ class VersionFile(unittest.TestCase):
         spec = importlib.util.spec_from_file_location('package_scripted_version', REPO / 'package_scripted.py')
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        self.assertEqual(module.read_version(), '1.0.0-rc.2')
+        self.assertEqual(module.read_version(), version_file())
         self.assertRegex(module.read_version(), SEMVER)
 
     def test_settings_exposes_version_without_hardcoding_it(self):

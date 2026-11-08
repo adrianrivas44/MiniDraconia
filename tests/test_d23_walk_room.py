@@ -10,7 +10,7 @@ coin flip; with no full walk either way she takes the roomier side if it holds h
 pose instead.
 
 Standard library unittest + PySide6, no network, injected geometry and clocks. The pet-window
-contracts run the real `PetWidget._mia_play_pose`, `_move_customized`, `limit_in_screen`, the
+contracts run the real `PetWidget._companion_play_pose`, `_move_customized`, `limit_in_screen`, the
 Interaction and Animation workers in a fresh interpreter (the M3.2 stand-in window). No test reads
 source text.
 """
@@ -48,7 +48,7 @@ def full_walk_px(scale):
 
 class WalkRoomRule(unittest.TestCase):
     def test_full_walk_is_derived_from_her_role_at_the_current_scale(self):
-        from DyberPet.mia_director import walk_distance
+        from DyberPet.companion_director import walk_distance
         for scale in (0.5, 2 / 3, 1.0, 1.5):
             with self.subTest(scale=scale):
                 self.assertAlmostEqual(walk_distance([her_walk('left')], scale), full_walk_px(scale), places=6)
@@ -58,7 +58,7 @@ class WalkRoomRule(unittest.TestCase):
                          'only the walk part of an act list counts')
 
     def test_room_is_measured_from_her_window_to_her_screen_edges(self):
-        from DyberPet.mia_director import walk_room
+        from DyberPet.companion_director import walk_room
         self.assertEqual(walk_room(0, 300, 0, 1024), {'left': 0, 'right': 724})
         self.assertEqual(walk_room(724, 300, 0, 1024), {'left': 724, 'right': 0})
         self.assertEqual(walk_room(-150, 300, 0, 1024), {'left': 0, 'right': 874}, 'clamped past the edge')
@@ -66,7 +66,7 @@ class WalkRoomRule(unittest.TestCase):
                          'a screen left of the primary')
 
     def test_direction_choice(self):
-        from DyberPet.mia_director import choose_walk_direction
+        from DyberPet.companion_director import choose_walk_direction
         need = {'left': 330.0, 'right': 330.0}
         rng = random.Random(3)
         self.assertEqual({choose_walk_direction(rng, {'left': 0, 'right': 724}, need) for _ in range(50)},
@@ -85,7 +85,7 @@ class WalkRoomRule(unittest.TestCase):
     def test_no_full_walk_either_way_she_takes_the_roomier_side(self):
         """Her 515 px window at 100 % leaves 509 px of a 1024 px screen: in the middle neither side
         holds a 330 px walk. She is not stuck there: the roomier side, if it holds half a walk."""
-        from DyberPet.mia_director import MIN_WALK_FRACTION, choose_walk_direction, walk_room
+        from DyberPet.companion_director import MIN_WALK_FRACTION, choose_walk_direction, walk_room
         need = {'left': full_walk_px(1.0), 'right': full_walk_px(1.0)}
         self.assertEqual(MIN_WALK_FRACTION, 0.5)
         rng = random.Random(5)
@@ -168,7 +168,7 @@ class DirectorChoosesTheRoomySide(unittest.TestCase):
 class PetWalksWithRoom(unittest.TestCase):
     """A 1024 px screen. Stand-in window 300 px wide, display scale 0.5 (full walk 165 px)."""
     CODE = '''
-from DyberPet.mia_director import MiaDirector
+from DyberPet.companion_director import CompanionDirector
 out = {'need': None}
 SCREEN = QRect(0, 0, 1024, 760)
 
@@ -179,7 +179,7 @@ def pet_at(x, screen=SCREEN):
 
 def director_for(pet, clock, seed):
     poses = set(conf.act_dict) | set(conf.act_name)
-    return MiaDirector(get_available_poses=lambda: poses, play_action=pet._mia_play_pose,
+    return CompanionDirector(get_available_poses=lambda: poses, play_action=pet._companion_play_pose,
                        is_busy=lambda: False, weights={'walk': 1.0}, rng=random.Random(seed),
                        system_idle_fn=lambda: 1.0, now_fn=clock, idle_pool={'tea': 1.0, 'read': 1.0},
                        on_log=lambda m: pet.lines.append('director ' + m), walk_room=pet._life_walk_room)
@@ -260,7 +260,7 @@ out['anim_narrow'] = {'lines': pet.lines, 'acts': sorted(set(shown)), 'x': pet.p
 # 6. Unchanged guards: a walk the micro ticker or follow asks for by name is not redirected by room.
 clock = Clock(); pet = pet_at(1024 - 150 - 30)      # her centre 30 px from the right wall
 w = interaction_for(pet, clock)
-pet._mia_play_pose('right_walk')
+pet._companion_play_pose('right_walk')
 run_interaction(pet, w, clock)
 out['by_name'] = [l for l in pet.lines if l.startswith('walk end')]
 print(json.dumps(out))

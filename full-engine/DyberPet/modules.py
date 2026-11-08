@@ -72,11 +72,11 @@ def is_walk(act):
 
 def walk_with_room(act, walk_room, pet_conf, idle_picker=None):
     """D2.3: the random animation's walk `act` under the director's rule
-    (mia_director.choose_walk_direction). `walk_room()` is the room the pet publishes from the UI
+    (companion_director.choose_walk_direction). `walk_room()` is the room the pet publishes from the UI
     thread ({'left': px, 'right': px}); this thread never reads the widget. The walk keeps its
     direction if one full walk fits that way, else turns to the other side if a walk fits there;
     with room on neither side it becomes one of her idle clips (`idle_picker`), else her stand."""
-    from DyberPet.mia_director import walk_distance, walkable_sides
+    from DyberPet.companion_director import walk_distance, walkable_sides
     try:
         room = walk_room()
     except Exception:
@@ -581,7 +581,7 @@ class Animation_worker(QObject):
                 settings.current_img = act.images[index % n_images]
                 settings.previous_anchor = settings.current_anchor
                 settings.current_anchor = scaled_anchor(act.anchor)
-                # Mia: publicar el acto que pinta Animation_worker (C1 revisión 2: moonwalk).
+                # Publicar el acto que pinta Animation_worker (C1 revisión 2: moonwalk).
                 settings.anim_act = act
                 self.sig_setimg_anim.emit()
                 self._move(act, index - shown)
@@ -890,7 +890,7 @@ class Interaction_worker(QObject):
             if settings.current_act != act:
                 settings.previous_act = settings.current_act
                 settings.current_act = act
-                settings.anim_act = None  # Mia: la interacción manda; ver set_img
+                settings.anim_act = None  # La interacción manda; ver set_img
             settings.playid = 0
             settings.act_started_at = now
             settings.act_frame_shown = -1

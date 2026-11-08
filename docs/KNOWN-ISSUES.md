@@ -1,9 +1,10 @@
 # Known issues and validation limits
 
 - This is a release candidate, not a stable product.
-- She talks offline by default. Free-form conversation needs your own OpenAI-compatible endpoint (Settings → AI / Privacy; nothing is preset): a hosted service with your API key, or a server on your own computer without one. That mode is text only. It was tested against fake endpoints on Linux and, for a local server, against a real Ollama on Windows (results in `docs/RECOMMENDED-SETUP.md`); the app's own client has not yet been run against a real hosted endpoint. Storing the key uses Windows DPAPI; its real round trip passed on Windows.
-- On Windows, a local server addressed as `localhost` can add about 2 seconds per reply (IPv6 `::1` is tried first and Ollama listens on IPv4 only). Use `127.0.0.1`. The hint in Settings still shows `localhost`; it will change in the next build.
-- The first message after a local server starts may fall back to a stored line while the model loads. Warm the model up first.
+- She talks offline by default. Free-form conversation needs your own OpenAI-compatible endpoint (Settings → AI / Privacy; nothing is preset): a hosted service with your API key, or a server on your own computer without one. That mode is text only. It was tested against fake endpoints on Linux and, for a local server, rc.2's client against a real Ollama on Windows (results in `docs/RECOMMENDED-SETUP.md`); the app's own client has not yet been run against a real hosted endpoint. Storing the key uses Windows DPAPI; its real round trip passed on Windows.
+- The rc.3 fixes for a server on your own computer (`localhost` connected as `127.0.0.1`, the 90-second local timeout, the background warm-up, the thinking pose while a reply waits, and cleaner replies) were verified with automated tests and stand-in servers on Linux. Their check against a real local server on Windows, through the frozen Settings screen, is listed in `docs/RELEASE-CHECKLIST.md`.
+- A server that takes longer than 90 seconds to load its model can still make that first message fall back to a stored line (the request is tried once more).
+- Smaller local models may reply off character or without an emotion tag. The app removes stray role prefixes and bracket junk, but it cannot fix what the model says; `docs/RECOMMENDED-SETUP.md` lists what worked.
 - Her walk speed (5.16 sprite px per frame) is a loop average measured from a 16-frame walk with held frames: on held frames the feet may slide slightly even though each loop travels exactly as far as her feet. Human review on a real display is pending.
 - Her climb is a broom ride: its speed is a design choice (no hand holds to match).
 - Only Windows 11 x64 is the initial target; wider platform support is not verified.

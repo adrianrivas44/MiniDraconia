@@ -29,7 +29,7 @@ from DyberPet.custom_widgets import RoundBarBase, LevelBadge
 from DyberPet.bubbleManager import BubbleManager
 from DyberPet.local_brain import LocalBrain, save_default_config, chat_with_messages
 from DyberPet.throw import throw_velocity  # lanzamiento: calculo puro compartido
-from DyberPet.mia_chat import ChatBox, ChatHistory, ask_mia, load_chat_config, bubble_duration_s, build_mia_chat_bubble
+from DyberPet.companion_chat import ChatBox, ChatHistory, ask_companion, load_chat_config, bubble_duration_s, build_companion_chat_bubble
 from DyberPet.pet_life import PetLifeMixin, walking_toward as life_walking_toward
 from DyberPet.pet_conversation import ConversationMixin
 from DyberPet import frames as pet_frames
@@ -147,8 +147,9 @@ class DP_HpBar(QProgressBar):
         before_value = self.value()
 
         if from_mod == 'Scheduler':
-            # Mia: Mia no es un tamagotchi; el hambre no baja con el tiempo (con hambre deja de moverse).
-            if settings.HP_stop or getattr(settings, "petname", "") == "Mia":
+            # No es un tamagotchi: el hambre no baja con el tiempo mientras HP_stop esta activo
+            # (y arriba ya es inerte para todas las mascotas).
+            if settings.HP_stop:
                 return
             new_hp_inner = max(self.hp_inner + change_value, 0)
 
@@ -358,9 +359,9 @@ class DP_FvBar(QProgressBar):
 
 # Pet Object
 
-class _MiaChatWorker(QObject):
+class _CompanionChatWorker(QObject):
     """Corre `fn()` (la llamada a Ollama) en un QThread aparte, nunca en el
-    hilo de UI (contrato-chat.txt)."""
+    hilo de UI."""
     finished = Signal(str)
 
     def __init__(self, fn):
@@ -437,17 +438,17 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
         self.click_timer = QElapsedTimer()
         self.click_interval = 1000  # Max interval in ms to consider consecutive clicks
         self.click_count = 0
-        # Mia: ultimo punto de clic (relativo al sprite), para elegir zona de
+        # Ultimo punto de clic (relativo al sprite), para elegir zona de
         # toque en patpat() (comportamiento 6/B2).
-        self._mia_last_click_pos = None
+        self._companion_last_click_pos = None
 
         # Screen info
         settings.screens = screens #[i.geometry() for i in screens]
-        # Mia: usa QGuiApplication.primaryScreen() de verdad (no solo el
+        # Usa QGuiApplication.primaryScreen() de verdad (no solo el
         # orden recibido) para no depender de que quien arme `screens` haya
         # puesto la primaria primero.
         from PySide6.QtGui import QGuiApplication
-        from DyberPet.mia_director import pick_primary_screen
+        from DyberPet.companion_director import pick_primary_screen
         primary = pick_primary_screen(screens, QGuiApplication.primaryScreen())
         self.current_screen = primary.availableGeometry() #geometry()
         settings.current_screen = primary
@@ -478,10 +479,10 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
         self.runInteraction()
         self.runScheduler()
 
-        # Mia: saluda al arrancar (greet si existe la pose, si no happy).
+        # Saluda al arrancar (greet si existe la pose, si no happy).
         # Movido aqui (no a init_conf) porque necesita self.workers, que se
         # crea justo arriba; init_conf corre antes de que existan.
-        self._send_mia_greeting()
+        self._send_companion_greeting()
         
 
         # 初始化重复提醒任务 - feature deleted
@@ -506,9 +507,9 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
     def enterEvent(self, event):
         # Change the cursor when it enters the window
         self.setCursor(self.cursor_default)
-        # Mia: el raton pasando por encima del pet tambien cuenta como
+        # El raton pasando por encima del pet tambien cuenta como
         # interaccion (comportamiento 4, B1b).
-        self.mia_director.note_interaction()
+        self.companion_director.note_interaction()
         super().enterEvent(event)
 
     def leaveEvent(self, event):
@@ -517,9 +518,9 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
         super().leaveEvent(event)
 
     def mouseDoubleClickEvent(self, event):
-        # Mia: doble clic abre el chat escrito (contrato-chat.txt punto 1).
+        # Doble clic abre el chat escrito.
         if event.button() == Qt.LeftButton:
-            self._open_mia_chat()
+            self._open_companion_chat()
             return
         super().mouseDoubleClickEvent(event)
 
@@ -544,12 +545,12 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
             # 左键绑定拖拽
             self.is_follow_mouse = True
             self.mouse_drag_pos = event.globalPos() - self.pos()
-            # Mia: cualquier clic cuenta como interaccion (comportamiento 4,
+            # Cualquier clic cuenta como interaccion (comportamiento 4,
             # evita que el sueno llegue mientras User esta usando el pet) y
             # guardamos el punto de clic relativo al sprite para la zona de
             # toque (comportamiento 6, ver patpat()).
-            self.mia_director.note_interaction()
-            self._mia_last_click_pos = event.pos()
+            self.companion_director.note_interaction()
+            self._companion_last_click_pos = event.pos()
             if settings.petname == 'Draconia':
                 self._draconia_reactions.begin_gesture()
             
@@ -572,11 +573,10 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
             #self.setCursor(QCursor(Qt.ArrowCursor))
             self.setCursor(self.cursor_clicked)
 
-        # Mia: clic central abre el chat escrito (contrato-chat.txt punto 1:
-        # separar doble-clic de patpat es fragil con este motor de clics, asi
-        # que usamos el menu + este atajo de clic central en su lugar).
+        # Clic central abre el chat escrito (separar doble-clic de patpat es
+        # fragil con este motor de clics, asi que usamos el menu + este atajo de clic central en su lugar).
         if event.button() == Qt.MiddleButton:
-            self._open_mia_chat()
+            self._open_companion_chat()
             event.accept()
 
     def mouseMoveEvent(self, event):
@@ -591,8 +591,8 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
 
             self.mouse_moving = True
             self.setCursor(self.cursor_dragged)
-            # Mia: seguir arrastrando tambien cuenta como interaccion.
-            self.mia_director.note_interaction()
+            # Seguir arrastrando tambien cuenta como interaccion.
+            self.companion_director.note_interaction()
             if settings.petname == 'Draconia':
                 self._draconia_react('drag')
 
@@ -609,8 +609,8 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
                 self._life_walk_end()            # M3.2: a walk ends when she is picked up
                 self.workers['Animation'].pause()
                 self.workers['Interaction'].start_interact('mousedrag')
-                # Mia: animo (contrato mia-mood punto 2) -- la arrastran.
-                self._mia_note_mood_event("drag")
+                # Animo -- la arrastran.
+                self._companion_note_mood_event("drag")
             
 
             event.accept()
@@ -667,8 +667,8 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
                         settings.fall_right = True
                     else:
                         settings.fall_right = False
-                    # Mia: animo (contrato mia-mood punto 2) -- la sueltan y cae.
-                    self._mia_note_mood_event("fall")
+                    # Animo -- la sueltan y cae.
+                    self._companion_note_mood_event("fall")
                     if settings.petname == 'Draconia':
                         self._draconia_react('fall')
 
@@ -1084,46 +1084,41 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
         self.StatMenu.addAction(self.following_action)
         self.StatMenu.addSeparator()
         
-        # Mia: chat escrito (comportamiento 12, docs/contrato-chat.txt).
+        # Chat escrito (comportamiento 12).
         self.StatMenu.addActions([
         ])
         self.StatMenu.addSeparator()
 
-        # Mia: voz en ingles (contrato-voz-en.md). Toggle checkeable que
-        # lee/escribe voice.enabled en mia_brain.json; "Status report" y
-        # "Today's briefing" piden sus datos/archivo al vuelo.
-        from DyberPet.mia_voice import load_voice_config
+        # Voz en ingles. Toggle checkeable que lee/escribe voice.enabled en
+        # el brain del perfil activo.
+        from DyberPet.companion_voice import load_voice_config
         # perfil: voz/idioma del personaje activo (contrato punto 7).
-        _voice_cfg = load_voice_config(self._mia_brain_path())
-        self.mia_voice_toggle = Action(FIF.VOLUME, self.tr("Voice (English)"))
-        self.mia_voice_toggle.setCheckable(True)
-        self.mia_voice_toggle.setChecked(bool(_voice_cfg.get("enabled", False)))
-        self.mia_voice_toggle.triggered.connect(self._toggle_mia_voice)
-        self.StatMenu.addActions([
-            self.mia_voice_toggle,
-            Action(FIF.CALENDAR, self.tr("Status report"), triggered=self._mia_show_status_report),
-            Action(FIF.DOCUMENT, self.tr("Today's briefing"), triggered=self._mia_show_briefing),
-        ])
+        _voice_cfg = load_voice_config(self._companion_brain_path())
+        self.companion_voice_toggle = Action(FIF.VOLUME, self.tr("Voice (English)"))
+        self.companion_voice_toggle.setCheckable(True)
+        self.companion_voice_toggle.setChecked(bool(_voice_cfg.get("enabled", False)))
+        self.companion_voice_toggle.triggered.connect(self._toggle_companion_voice)
+        self.StatMenu.addActions([self.companion_voice_toggle])
         self.StatMenu.addSeparator()
 
-        # Mia: trepar paredes (contrato trepar-paredes). Toggle checkeable
-        # que lee/escribe climb.enabled en mia_brain.json.
-        from DyberPet.mia_director import load_climb_config
-        _climb_cfg = load_climb_config(self._mia_brain_path())
-        self.mia_climb_toggle = Action(FIF.UP, self.tr("Climb walls"))
-        self.mia_climb_toggle.setCheckable(True)
-        self.mia_climb_toggle.setChecked(bool(_climb_cfg.get("enabled", False)))
-        self.mia_climb_toggle.triggered.connect(self._toggle_mia_climb)
-        self.StatMenu.addActions([self.mia_climb_toggle])
+        # Trepar paredes. Toggle checkeable que lee/escribe climb.enabled en
+        # el brain del perfil activo.
+        from DyberPet.companion_director import load_climb_config
+        _climb_cfg = load_climb_config(self._companion_brain_path())
+        self.companion_climb_toggle = Action(FIF.UP, self.tr("Climb walls"))
+        self.companion_climb_toggle.setCheckable(True)
+        self.companion_climb_toggle.setChecked(bool(_climb_cfg.get("enabled", False)))
+        self.companion_climb_toggle.triggered.connect(self._toggle_companion_climb)
+        self.StatMenu.addActions([self.companion_climb_toggle])
         self.StatMenu.addSeparator()
 
-        # Mia: animo con continuidad (contrato mia-mood punto 7). Entrada de
+        # Animo con continuidad. Entrada de
         # solo lectura; se actualiza cuando cambia la emocion dominante
-        # (_mia_note_mood_event).
-        self.mia_mood_menu_entry = Action(
-            FIF.HEART, self.tr("Mood: ") + getattr(getattr(self, "mia_mood", None), "dominant", "content"))
-        self.mia_mood_menu_entry.setEnabled(False)
-        self.StatMenu.addActions([self.mia_mood_menu_entry])
+        # (_companion_note_mood_event).
+        self.companion_mood_menu_entry = Action(
+            FIF.HEART, self.tr("Mood: ") + getattr(getattr(self, "companion_mood", None), "dominant", "content"))
+        self.companion_mood_menu_entry.setEnabled(False)
+        self.StatMenu.addActions([self.companion_mood_menu_entry])
         self.StatMenu.addSeparator()
 
         # RoundMenu.clear() removes actions only: the legacy separators, the hidden title widget
@@ -1137,17 +1132,17 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
         if settings.petname == 'Draconia':
             # Typed chat (any mode), the Voice switch (self-hosted relay or a voice pack) and climbing.
             self.StatMenu.addActions([
-                Action(FIF.CHAT, 'Talk to Draconia', triggered=self._open_mia_chat),
+                Action(FIF.CHAT, 'Talk to Draconia', triggered=self._open_companion_chat),
             ])
             if self._conv_mode() == 'relay' or self._conv_has_voice_pack():
                 # D2.1: the same switch governs relay voice and the optional voice pack.
                 from DyberPet.brain_client import relay_voice_enabled
                 self.relay_voice_toggle = Action(FIF.VOLUME, 'Voice')
                 self.relay_voice_toggle.setCheckable(True)
-                self.relay_voice_toggle.setChecked(relay_voice_enabled(self._mia_brain_path()))
+                self.relay_voice_toggle.setChecked(relay_voice_enabled(self._companion_brain_path()))
                 self.relay_voice_toggle.triggered.connect(self._toggle_relay_voice)
                 self.StatMenu.addActions([self.relay_voice_toggle])
-            self.StatMenu.addActions([self.mia_climb_toggle])
+            self.StatMenu.addActions([self.companion_climb_toggle])
         self.StatMenu.addActions([
             Action(FIF.POWER_BUTTON, 'Quit', triggered=self.quit),
         ])
@@ -1326,93 +1321,93 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
         self.bubble_manager = BubbleManager()
         self.bubble_manager.register_bubble.connect(self.register_bubbleText)
 
-        # Mia: cerebro local (Ollama). Si no está, el pet sigue con globos fijos.
+        # Cerebro local (Ollama). Si no está, el pet sigue con globos fijos.
         save_default_config()
         self.local_brain = LocalBrain(self)
-        self.local_brain.reply.connect(self._on_mia_reply)
-        self.local_brain.unavailable.connect(self._on_mia_brain_unavailable)
-        self._mia_fallback_text = None
+        self.local_brain.reply.connect(self._on_companion_reply)
+        self.local_brain.unavailable.connect(self._on_companion_brain_unavailable)
+        self._companion_fallback_text = None
 
-        # Mia: chat escrito (comportamiento 12). Memoria corta en proceso,
-        # nunca se persiste a disco (contrato-chat.txt punto 6).
-        self.mia_chat_history = ChatHistory()
-        self.mia_chat_box = None
+        # Chat escrito (comportamiento 12). Memoria corta en proceso,
+        # nunca se persiste a disco.
+        self.companion_chat_history = ChatHistory()
+        self.companion_chat_box = None
 
-        # Mia: director de conducta (saluda/camina/mira al cursor/duerme...).
-        from DyberPet.mia_director import (
-            MiaDirector, load_director_config, load_mood_table, load_own_idle_poses,
+        # Director de conducta (saluda/camina/mira al cursor/duerme...).
+        from DyberPet.companion_director import (
+            CompanionDirector, load_director_config, load_mood_table, load_own_idle_poses,
         )
-        director_cfg = load_director_config(self._mia_brain_path())
-        # Mia: animo con continuidad (contrato mia-mood). Estado puro en
-        # mia_mood.py, persistido en data/mia_mood.json; sin ese archivo
+        director_cfg = load_director_config(self._companion_brain_path())
+        # Animo con continuidad. Estado puro en
+        # companion_mood.py, persistido en data/companion_mood.json; sin ese archivo
         # arranca en el estado default de siempre.
-        from DyberPet.mia_mood import MoodEngine
-        self.mia_mood = MoodEngine.load(self._mia_mood_path())
-        self._mia_mood_dominant_seen = self.mia_mood.dominant
+        from DyberPet.companion_mood import MoodEngine
+        self.companion_mood = MoodEngine.load(self._companion_mood_path())
+        self._companion_mood_dominant_seen = self.companion_mood.dominant
         # D2.2: a profile copied before a clip existed (mirror, quill) gets the bundled mood
         # entries for the poses it lacks; its own entries win.
         from DyberPet import char_profile
-        from DyberPet.mia_director import merge_mood_tables
-        self._mia_mood_table = merge_mood_tables(
-            load_mood_table(self._mia_brain_path()),
+        from DyberPet.companion_director import merge_mood_tables
+        self._companion_mood_table = merge_mood_tables(
+            load_mood_table(self._companion_brain_path()),
             load_mood_table(char_profile.brain_path(Path(basedir) / 'data', pet_name)))
         # perfil: pool de idle propio del personaje activo (contrato
-        # MiniDraconia parte B punto 7); vacio para Mia/Kitty/ChrisKitty.
-        self._mia_own_idle_poses = load_own_idle_poses(self._mia_brain_path())
+        # MiniDraconia parte B punto 7); vacio para Kitty/ChrisKitty.
+        self._companion_own_idle_poses = load_own_idle_poses(self._companion_brain_path())
         # M3.2: the role's own idle pool (her clips: tea, reading, spells...), built into
         # res/role/<pet>/pet_conf.json and authoritative: it does not depend on a profile file
         # (older profiles carry own_idle_poses on another scale, which would starve clips).
-        from DyberPet.mia_director import load_role_idle_poses
-        self._mia_idle_pool = load_role_idle_poses(
+        from DyberPet.companion_director import load_role_idle_poses
+        self._companion_idle_pool = load_role_idle_poses(
             os.path.join(basedir, 'res/role/{}/pet_conf.json'.format(pet_name)))
-        self._mia_director_profile_options = self._mia_profile_director_options()
-        self.mia_director = MiaDirector(
-            get_available_poses=self._mia_available_poses,
-            play_action=self._mia_play_pose,
-            # Mia: ni duerme ni cambia de pose mientras trepa (contrato trepar-paredes).
+        self._companion_director_profile_options = self._companion_profile_director_options()
+        self.companion_director = CompanionDirector(
+            get_available_poses=self._companion_available_poses,
+            play_action=self._companion_play_pose,
+            # Ni duerme ni cambia de pose mientras trepa (contrato trepar-paredes).
             # M3: ni mientras dice una frase (habla de verdad, talk_controller.py).
             is_busy=lambda: settings.draging == 1 or self._life_holds_animation() or (
-                bool(self._mia_director_profile_options) and bool(getattr(self.workers.get('Interaction'), 'interact', None))),
+                bool(self._companion_director_profile_options) and bool(getattr(self.workers.get('Interaction'), 'interact', None))),
             weights=director_cfg["weights"],
             sleep_after_s=director_cfg["sleep_after_s"],
-            mood_table=self._mia_mood_table,
-            get_dominant_mood=lambda: self.mia_mood.dominant,
-            on_absence_return=self._mia_on_absence_return,
-            on_mood_tick=self._mia_mood_tick,
-            own_idle_poses=self._mia_own_idle_poses,
-            idle_pool=self._mia_idle_pool,
+            mood_table=self._companion_mood_table,
+            get_dominant_mood=lambda: self.companion_mood.dominant,
+            on_absence_return=self._companion_on_absence_return,
+            on_mood_tick=self._companion_mood_tick,
+            own_idle_poses=self._companion_own_idle_poses,
+            idle_pool=self._companion_idle_pool,
             # D2.1: one timestamped talk-log line per director decision (never chat text).
-            on_log=lambda msg: self._mia_log('director', msg),
+            on_log=lambda msg: self._companion_log('director', msg),
             # D2.3: a random walk goes the way she has room for a whole walk (wall-aware).
             walk_room=self._life_walk_room,
-            **self._mia_director_profile_options,
+            **self._companion_director_profile_options,
         )
-        self.mia_director.start()
+        self.companion_director.start()
 
-        # Mia: guarda data/mia_mood.json cada minuto (contrato punto 6);
+        # Guarda data/companion_mood.json cada minuto (contrato punto 6);
         # tambien se guarda al cerrar (quit()).
-        self.mia_mood_save_timer = QTimer(self)
-        self.mia_mood_save_timer.timeout.connect(self._mia_save_mood)
-        self.mia_mood_save_timer.start(60_000)
+        self.companion_mood_save_timer = QTimer(self)
+        self.companion_mood_save_timer.timeout.connect(self._companion_save_mood)
+        self.companion_mood_save_timer.start(60_000)
 
-        # Mia: microticker (parpadeo, mirar al cursor, patalear al cargarla,
+        # Microticker (parpadeo, mirar al cursor, patalear al cargarla,
         # bordes, hablar; comportamientos 5/7/8/9/10, B2 del informe revisor).
-        from DyberPet.mia_director import MiaMicroTicker
-        self._mia_chat_bubble_visible = False
-        self._mia_cursor_flip = False
-        self.mia_micro_ticker = MiaMicroTicker(
-            get_context=self._mia_micro_context,
-            play_action=self._mia_play_pose,
-            apply_cursor_flip=self._mia_apply_cursor_flip,
-            on_edge=self._mia_on_edge,
-            rng=self.mia_director.rng,
-            # Mia: trepar paredes (contrato trepar-paredes).
+        from DyberPet.companion_director import CompanionMicroTicker
+        self._companion_chat_bubble_visible = False
+        self._companion_cursor_flip = False
+        self.companion_micro_ticker = CompanionMicroTicker(
+            get_context=self._companion_micro_context,
+            play_action=self._companion_play_pose,
+            apply_cursor_flip=self._companion_apply_cursor_flip,
+            on_edge=self._companion_on_edge,
+            rng=self.companion_director.rng,
+            # Trepar paredes (contrato trepar-paredes).
             climb_cfg=director_cfg.get("climb"),
             set_pos_y=lambda y: self.move(self.pos().x(), int(round(y))),
-            on_climb_log=lambda msg: self._mia_log("climb", msg),
+            on_climb_log=lambda msg: self._companion_log("climb", msg),
             allow_fall=lambda: bool(settings.set_fall),
-            start_fall=self._mia_start_climb_fall,
-            on_climb_top=lambda: self._mia_note_mood_event("climb_top"),
+            start_fall=self._companion_start_climb_fall,
+            on_climb_top=lambda: self._companion_note_mood_event("climb_top"),
             # M3: climb at the sprite's measured speed, hands on the wall, frozen while hanging.
             get_climb_speed=self._life_climb_speed,
             on_climb_start=self._life_snap_to_wall,
@@ -1429,49 +1424,49 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
         self.talk_controller = TalkController(play_pose=self._life_talk_play, stop_pose=self._life_talk_stop,
                                   on_release=self._life_release_line,
                                   clip_s=self._life_clip_s, body_busy=self._life_body_busy)
-        self.mia_micro_timer = QTimer(self)
+        self.companion_micro_timer = QTimer(self)
         # M3.2: which wall she touches, for the random animation thread (it never reads the widget).
-        self.mia_micro_timer.timeout.connect(self._life_publish_wall)
-        self.mia_micro_timer.timeout.connect(self.mia_micro_ticker.tick)
-        self.mia_micro_timer.start(150)
+        self.companion_micro_timer.timeout.connect(self._life_publish_wall)
+        self.companion_micro_timer.timeout.connect(self.companion_micro_ticker.tick)
+        self.companion_micro_timer.start(150)
         # M3.3: the talk controller ticks every 40 ms (half a 12 fps frame): talk stops as soon as
         # the voice ends, and the line's poses start as soon as a finishing clip is over.
         self.talk_timer = QTimer(self)
         self.talk_timer.timeout.connect(self._life_talk_tick)
         self.talk_timer.start(40)
 
-        # Mia: charla espontánea con el modelo local cada 1.5–4 min (User: "no habla, solo saluda").
-        self._mia_chatter_cfg = director_cfg.get("chatter", {}) if isinstance(director_cfg, dict) else {}
-        self.mia_chatter_timer = QTimer(self)
-        self.mia_chatter_timer.setSingleShot(True)
-        self.mia_chatter_timer.timeout.connect(self._mia_chatter)
-        self._mia_schedule_chatter(first=True)
+        # Charla espontánea con el modelo local cada 1.5–4 min (User: "no habla, solo saluda").
+        self._companion_chatter_cfg = director_cfg.get("chatter", {}) if isinstance(director_cfg, dict) else {}
+        self.companion_chatter_timer = QTimer(self)
+        self.companion_chatter_timer.setSingleShot(True)
+        self.companion_chatter_timer.timeout.connect(self._companion_chatter)
+        self._companion_schedule_chatter(first=True)
 
-        # Mia: voz en ingles (Kokoro bf_emma), apagada por defecto
-        # (contrato-voz-en.md). Carga perezosa del modelo onnx: si Kokoro/
+        # Voz en ingles (Kokoro bf_emma), apagada por defecto
+        #. Carga perezosa del modelo onnx: si Kokoro/
         # onnxruntime no estan instalados o el modelo no esta en disco,
-        # MiaVoice.speak() es un no-op silencioso.
-        from DyberPet.mia_voice import MiaVoice, KokoroEngine
+        # CompanionVoice.speak() es un no-op silencioso.
+        from DyberPet.companion_voice import CompanionVoice, KokoroEngine
         if pet_name == 'Draconia':
             # Her lines come from the active conversation mode (DyberPet/pet_conversation.py):
             # self-hosted relay (voiced by the relay), own AI (text) or offline lines (text). Only
             # the relay produces a voice; without it this engine never synthesises anything.
             from DyberPet.brain_client import RelayVoiceEngine
-            self._mia_voice_engine = RelayVoiceEngine()
+            self._companion_voice_engine = RelayVoiceEngine()
         else:
             _kokoro_dir = Path(settings.BASEDIR or '.') / 'res' / 'voice' / 'kokoro'
-            self._mia_voice_engine = KokoroEngine(
+            self._companion_voice_engine = KokoroEngine(
                 model_path=_kokoro_dir / 'kokoro-v1.0.onnx',
                 voices_path=_kokoro_dir / 'voices-v1.0.bin',
             )
-        self.mia_voice = MiaVoice(
-            engine=self._mia_voice_engine,
+        self.companion_voice = CompanionVoice(
+            engine=self._companion_voice_engine,
             tmp_dir=Path(settings.CONFIGDIR) / 'data' / 'tmp',
         )
-        self.mia_voice._log_cb = self._mia_log  # Mia: bitácora de voz (suena / falla)
+        self.companion_voice._log_cb = self._companion_log  # Bitácora de voz (suena / falla)
         # M3: she talks for as long as the WAV plays (M3.1: and closes her mouth in its pauses).
-        self.mia_voice.on_started = self._life_voice_started
-        self.mia_voice.on_failed = self.talk_controller.voice_failed
+        self.companion_voice.on_started = self._life_voice_started
+        self.companion_voice.on_failed = self.talk_controller.voice_failed
         self._conv_setup()
 
         self._set_menu(self.pets)
@@ -1567,11 +1562,11 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
         
         # 初始位置
         #screen_geo = QDesktopWidget().availableGeometry() #QDesktopWidget().screenGeometry()
-        # Mia: posicion inicial centrada al 30% de la pantalla PRIMARIA real
+        # Posicion inicial centrada al 30% de la pantalla PRIMARIA real
         # (current_screen ya viene de QGuiApplication.primaryScreen(), ver
         # __init__), apoyada en el suelo de esa pantalla.
-        from DyberPet.mia_director import primary_screen_start_pos, start_screen_and_frac
-        # Mia (multimonitor): nace en cualquier pantalla y en cualquier punto (15-85 %),
+        from DyberPet.companion_director import primary_screen_start_pos, start_screen_and_frac
+        # Multimonitor: nace en cualquier pantalla y en cualquier punto (15-85 %),
         # no siempre al 30 % de la principal (User: "se queda a la izquierda").
         try:
             _scr, _frac = start_screen_and_frac(random.Random(), list(settings.screens), settings.current_screen)
@@ -1658,13 +1653,13 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
         if self._life_sync_frames():
             self._life_fit_window(self.tomato_time.width(), statbar_h)
         img_to_show = settings.current_img
-        # Mia: mirar al cursor (comportamiento 5) - espejo horizontal del
+        # Mirar al cursor (comportamiento 5) - espejo horizontal del
         # frame default cuando el cursor esta cerca y el pet no esta
         # caminando (should_flip_to_cursor ya decide cuando aplica).
-        # Mia: nunca espejar acciones con dirección propia (caminar, trepar, asomarse, seguir cursor):
+        # Nunca espejar acciones con dirección propia (caminar, trepar, asomarse, seguir cursor):
         # el espejo pegado producía moonwalk (dibujo hacia un lado, desplazamiento hacia el otro).
-        from DyberPet.mia_director import should_mirror_frame
-        mirror = should_mirror_frame(getattr(self, "_mia_cursor_flip", False),
+        from DyberPet.companion_director import should_mirror_frame
+        mirror = should_mirror_frame(getattr(self, "_companion_cursor_flip", False),
                                      getattr(settings, "anim_act", None), getattr(settings, "current_act", None))
         if isinstance(img_to_show, QImage):
             # M3: a frame from the FrameStore, already at physical size with its DPR: shown 1:1.
@@ -1686,7 +1681,7 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
 
     def _compensate_rewards(self):
         self.compensate_rewards.emit()
-        # Mia: no notificar actualizaciones de upstream.
+        # No notificar actualizaciones de upstream.
 
     def register_notification(self, note_type, message):
         self.setup_notification.emit(note_type, message)
@@ -1695,67 +1690,67 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
     def register_bubbleText(self, bubble_dict:dict):
         self.setup_bubbleText.emit(bubble_dict, self.pos().x()+self.width()//2, self.pos().y()+self.height())
 
-    def _mia_log(self, kind: str, text: str) -> None:
-        """Bitácora local de lo que Mia pide y dice (data/mia_talk.log), para verificar.
+    def _companion_log(self, kind: str, text: str) -> None:
+        """Bitácora local de lo que la mascota pide y dice (data/talk.log), para verificar.
         D2.1: one timestamped line per entry; past TALK_LOG_MAX_BYTES the log moves to
-        mia_talk.log.1 (one old copy kept), so director lines can never fill the disk."""
-        from DyberPet.mia_director import append_talk_log
-        append_talk_log(Path(settings.CONFIGDIR) / 'data' / 'mia_talk.log', kind, text)
+        talk.log.1 (one old copy kept), so director lines can never fill the disk."""
+        from DyberPet.companion_director import append_talk_log
+        append_talk_log(Path(settings.CONFIGDIR) / 'data' / 'talk.log', kind, text)
 
-    def _on_mia_brain_unavailable(self) -> None:
+    def _on_companion_brain_unavailable(self) -> None:
         """C3 revisión 2: si Ollama no responde, el saludo y los toques usan su globo fijo;
         la charla espontánea simplemente calla."""
-        self._mia_log("falla", "Local model did not respond")
-        text, self._mia_fallback_text = self._mia_fallback_text, None
+        self._companion_log("falla", "Local model did not respond")
+        text, self._companion_fallback_text = self._companion_fallback_text, None
         if text:
-            self._emit_mia_bubble(text)
+            self._emit_companion_bubble(text)
 
-    def _mia_ask(self, prompt: str, fallback: Optional[str] = None,
+    def _companion_ask(self, prompt: str, fallback: Optional[str] = None,
                  brain_event: Optional[str] = None, doing: Optional[str] = None) -> bool:
         if brain_event and getattr(self, '_conv_brain', None) is not None:
             # Draconia: a stored line answers the event (D2.1: events never call a brain).
             self._conv_event(brain_event, doing=doing)
             return True
-        self._mia_fallback_text = fallback
-        # Mia: contrato-voz-en.md punto 2 -- con la voz activada se fuerza
+        self._companion_fallback_text = fallback
+        # Con la voz activada se fuerza
         # el idioma a ingles (system_prompt_for_language ya cae al default
-        # en ingles si no hay override en mia_brain.json).
-        from DyberPet.mia_voice import load_voice_config, effective_language
+        # en ingles si no hay override en companion_brain.json).
+        from DyberPet.companion_voice import load_voice_config, effective_language
         from DyberPet.local_brain import system_prompt_for_language
-        voice_cfg = load_voice_config(self._mia_brain_path())
+        voice_cfg = load_voice_config(self._companion_brain_path())
         lang = effective_language(self.local_brain.cfg.get("language", "en"),
                                    voice_cfg.get("enabled", False), voice_cfg.get("lang"))
         system_override = system_prompt_for_language(self.local_brain.cfg, lang)
         queued = self.local_brain.ask(prompt, system_override=system_override)
         if not queued:
-            self._mia_fallback_text = None
+            self._companion_fallback_text = None
         return queued
 
-    def _on_mia_reply(self, text: str):
-        self._mia_fallback_text = None
-        from DyberPet.mia_director import clean_reply
+    def _on_companion_reply(self, text: str):
+        self._companion_fallback_text = None
+        from DyberPet.companion_director import clean_reply
         text = clean_reply(text)
-        self._mia_log("dice", text or "(empty)")
+        self._companion_log("dice", text or "(empty)")
         if text:
-            self._emit_mia_bubble(text)
-            # Mia: animo (contrato mia-mood punto 2) -- User chatea con ella.
-            self._mia_note_mood_event("chat")
+            self._emit_companion_bubble(text)
+            # Animo -- User chatea con ella.
+            self._companion_note_mood_event("chat")
 
-    # --- Mia: charla espontánea -------------------------------------------
-    def _mia_schedule_chatter(self, first: bool = False) -> None:
-        from DyberPet.mia_director import next_chatter_delay
-        delay = 45.0 if first else next_chatter_delay(self.mia_director.rng, getattr(self, "_mia_chatter_cfg", {}))
-        self.mia_chatter_timer.start(int(delay * 1000))
+    # --- Charla espontánea ------------------------------------------------
+    def _companion_schedule_chatter(self, first: bool = False) -> None:
+        from DyberPet.companion_director import next_chatter_delay
+        delay = 45.0 if first else next_chatter_delay(self.companion_director.rng, getattr(self, "_companion_chatter_cfg", {}))
+        self.companion_chatter_timer.start(int(delay * 1000))
 
-    def _mia_chatter(self) -> None:
+    def _companion_chatter(self) -> None:
         try:
             import datetime
-            from DyberPet.mia_director import may_chatter, choose_chatter_prompt
-            chat_open = self.mia_chat_box is not None and self.mia_chat_box.isVisible()
+            from DyberPet.companion_director import may_chatter, choose_chatter_prompt
+            chat_open = self.companion_chat_box is not None and self.companion_chat_box.isVisible()
             inter = getattr(self.workers.get('Interaction'), 'interact', None)
             act_name = getattr(self.workers.get('Interaction'), 'act_name', None)
-            asleep = (act_name == 'sleep') or getattr(self.mia_director, "is_asleep", False)
-            line_in_progress = getattr(self, "_mia_chat_bubble_visible", False) \
+            asleep = (act_name == 'sleep') or getattr(self.companion_director, "is_asleep", False)
+            line_in_progress = getattr(self, "_companion_chat_bubble_visible", False) \
                 or bool(getattr(getattr(self, "talk_controller", None), "active", False))
             if may_chatter(settings.onfloor, settings.draging, chat_open, line_in_progress, asleep):
                 # M3.2: the clip she is playing now (start_interact turns 'actlist' into
@@ -1766,46 +1761,46 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
                     pose = getattr(getattr(settings, 'anim_act', None), 'act_name', None)
                 else:
                     pose = None
-                prompt = choose_chatter_prompt(self.mia_director.rng, datetime.datetime.now(), pose=pose)
-                # Mia: animo (contrato mia-mood punto 5) -- si el globo lleva
+                prompt = choose_chatter_prompt(self.companion_director.rng, datetime.datetime.now(), pose=pose)
+                # Animo -- si el globo lleva
                 # >12s libre, el prompt lleva emocion/affection/eventos para
                 # que la charla espontanea tenga continuidad.
-                bubble_freed_at = getattr(self, "_mia_bubble_freed_at", 0.0)
+                bubble_freed_at = getattr(self, "_companion_bubble_freed_at", 0.0)
                 if time.time() - bubble_freed_at > 12.0:
-                    mood_cfg = getattr(self, "mia_mood", None)
+                    mood_cfg = getattr(self, "companion_mood", None)
                     if mood_cfg is not None:
                         prompt = mood_cfg.mood_context_prompt() + " " + prompt
-                from DyberPet.mia_director import pose_description
-                queued = self._mia_ask(prompt, brain_event='chatter', doing=pose_description(pose))
-                self._mia_log("pide" if queued else "ocupado", prompt)
+                from DyberPet.companion_director import pose_description
+                queued = self._companion_ask(prompt, brain_event='chatter', doing=pose_description(pose))
+                self._companion_log("pide" if queued else "ocupado", prompt)
             else:
-                self._mia_log("calla", "not available")
+                self._companion_log("calla", "not available")
         except Exception:
-            logging.getLogger(__name__).exception("_mia_chatter fallo (silenciado)")
+            logging.getLogger(__name__).exception("_companion_chatter fallo (silenciado)")
         finally:
-            self._mia_schedule_chatter()
+            self._companion_schedule_chatter()
 
-    def _emit_mia_bubble(self, text: str, voice: Optional[bool] = None,
+    def _emit_companion_bubble(self, text: str, voice: Optional[bool] = None,
                          wav: Optional[str] = None) -> None:
-        """Emite un globo mia_chat ya con wrap_text + bubble_duration_s
-        aplicados (contrato-chat.txt punto 4 / M1 del informe del revisor:
-        antes ambas funciones se importaban pero nunca se usaban aqui).
+        """Emite un globo companion_chat ya con wrap_text + bubble_duration_s
+        aplicados (antes ambas funciones se importaban pero nunca se usaban
+        aqui).
 
         Draconia: a typed-chat reply from the self-hosted relay is read by the relay voice
         (`voice=True`); a stored line plays its recorded voice-pack WAV (`wav`, D2.1). Both only
         with the menu's Voice switch on and MINIDRACONIA_MUTE unset; pack audio also stays
         silent with Settings' Mute (volume 0). She visibly talks for every line (pet_life.py)."""
-        director = getattr(self, 'mia_director', None)
+        director = getattr(self, 'companion_director', None)
         if director is not None and hasattr(director, 'note_activity'):
             director.note_activity()     # D2.1: no random nap within 3 minutes of a line
         metrics = QFontMetrics(self.font())
         # bubble_dict["timeout"] is in seconds (bubble_duration_s).
-        bubble_dict = build_mia_chat_bubble(text, metrics.horizontalAdvance)
-        from DyberPet.mia_voice import load_voice_config
-        voice_cfg = load_voice_config(self._mia_brain_path())
+        bubble_dict = build_companion_chat_bubble(text, metrics.horizontalAdvance)
+        from DyberPet.companion_voice import load_voice_config
+        voice_cfg = load_voice_config(self._companion_brain_path())
         if settings.petname == 'Draconia':
             from DyberPet.brain_client import relay_voice_enabled
-            allowed = relay_voice_enabled(self._mia_brain_path()) and os.environ.get('MINIDRACONIA_MUTE') != '1'
+            allowed = relay_voice_enabled(self._companion_brain_path()) and os.environ.get('MINIDRACONIA_MUTE') != '1'
             relay_voice = bool(voice) and allowed and self._conv_mode() == 'relay'
             pack_voice = bool(wav) and not voice and allowed and float(getattr(settings, 'volume', 1.0) or 0.0) > 0.0
             voice_cfg["enabled"] = relay_voice or pack_voice
@@ -1813,29 +1808,29 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
             # M3/M3.1: she visibly talks; a voiced line waits (thinking) for its voice.
             self._life_say_line(text, bubble_dict, voice_cfg, wav=wav if pack_voice else None)
             return
-        self._mia_show_bubble(bubble_dict)
-        self.mia_voice.speak(text, cfg=voice_cfg)
+        self._companion_show_bubble(bubble_dict)
+        self.companion_voice.speak(text, cfg=voice_cfg)
         if voice_cfg.get("enabled"):
-            self._mia_log("voz", "pide Emma")
+            self._companion_log("voz", "pide Emma")
 
-    def _mia_show_bubble(self, bubble_dict: dict) -> None:
+    def _companion_show_bubble(self, bubble_dict: dict) -> None:
         self.bubble_manager.register_bubble.emit(bubble_dict)
-        # Mia: mientras el globo mia_chat esta en pantalla, el microticker
+        # Mientras el globo companion_chat esta en pantalla, el microticker
         # alterna 'talk'/'default' (comportamiento 9, B2 del informe revisor).
-        self._mia_chat_bubble_visible = True
-        # Mia: animo (contrato mia-mood punto 5) -- hora en que el globo
+        self._companion_chat_bubble_visible = True
+        # Animo -- hora en que el globo
         # quedo libre, para saber si lleva >12s sin hablar.
-        self._mia_bubble_freed_at = time.time() + bubble_dict["timeout"]
-        QTimer.singleShot(int(bubble_dict["timeout"] * 1000), self._mia_clear_chat_bubble_flag)
+        self._companion_bubble_freed_at = time.time() + bubble_dict["timeout"]
+        QTimer.singleShot(int(bubble_dict["timeout"] * 1000), self._companion_clear_chat_bubble_flag)
 
     def _draconia_bubble(self, text):
         # A reaction-manifest line without a voice: shown like every other line (she talks).
-        self._emit_mia_bubble(text, voice=False)
+        self._emit_companion_bubble(text, voice=False)
 
     def _draconia_react(self, event):
         if settings.petname != 'Draconia':
             return
-        from DyberPet.mia_director import pose_allowed
+        from DyberPet.companion_director import pose_allowed
         interaction = getattr(self.workers.get('Interaction'), 'interact', None)
         if event in {'head', 'cheek', 'body'} and not pose_allowed(
                 'patpat', interaction, settings.onfloor, settings.draging):
@@ -1846,38 +1841,38 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
         if event == 'drag':
             controller.drag(**kwargs)
             return
-        pose = controller.react(event, getattr(self.mia_mood, 'dominant', 'content'),
-                                self._mia_available_poses(), **kwargs)
+        pose = controller.react(event, getattr(self.companion_mood, 'dominant', 'content'),
+                                self._companion_available_poses(), **kwargs)
         if pose:
             # M3.3: a touch reaction interrupts at once (even a line); its clip then finishes.
-            self._mia_play_pose(pose, from_touch=event in ('head', 'cheek', 'body'))
+            self._companion_play_pose(pose, from_touch=event in ('head', 'cheek', 'body'))
 
-    def _mia_clear_chat_bubble_flag(self) -> None:
-        self._mia_chat_bubble_visible = False
+    def _companion_clear_chat_bubble_flag(self) -> None:
+        self._companion_chat_bubble_visible = False
 
-    # --- Mia: director de conducta (ganchos de pocas lineas) -----------------
+    # --- Director de conducta (ganchos de pocas lineas) ----------------------
 
-    def _mia_available_poses(self) -> set:
+    def _companion_available_poses(self) -> set:
         """Poses/acciones disponibles para el pet actual (claves de
         act_conf.json via pet_conf.act_dict), para que el director pueda
         caer a happy/default cuando falte una (comportamiento 11)."""
         return set(getattr(self.pet_conf, "act_dict", {}).keys())
 
-    def _mia_profile_director_options(self) -> dict:
-        """Opt-in estricto: Mia y perfiles heredados no cambian."""
+    def _companion_profile_director_options(self) -> dict:
+        """Opt-in estricto: los perfiles heredados no cambian."""
         from DyberPet import char_profile
-        from DyberPet.mia_director import load_combos
+        from DyberPet.companion_director import load_combos
         data = Path(settings.CONFIGDIR) / 'data'
         if not char_profile.has_own_profile(data, settings.petname):
             return {}
-        path = self._mia_brain_path()
+        path = self._companion_brain_path()
         combos = load_combos(path)
         if not combos:
             return {}
         cfg = json.loads(path.read_text(encoding='utf-8'))
         return {'combos': combos, 'tick_range_s': cfg.get('director_tick_s', [8, 20])}
 
-    def _mia_play_pose(self, pose_name: str, loop: bool = False, from_talk: bool = False,
+    def _companion_play_pose(self, pose_name: str, loop: bool = False, from_talk: bool = False,
                        from_touch: bool = False) -> None:
         """Dispara una pose/accion por nombre si el motor la reconoce como
         accion random (act_data) o personalizada; si no la reconoce, no
@@ -1893,8 +1888,8 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
         M3.3: climb clips loop for the whole climb and climb_down starts on the held frame;
         a touch reaction (`from_touch`) interrupts a line at once."""
         try:
-            # Mia: nunca pisar arrastre/caída del motor (User: "se queda flotando").
-            from DyberPet.mia_director import pose_allowed
+            # Nunca pisar arrastre/caída del motor (User: "se queda flotando").
+            from DyberPet.companion_director import pose_allowed
             _inter = getattr(self.workers.get('Interaction'), 'interact', None) if hasattr(self, 'workers') else None
             if not pose_allowed(pose_name, _inter, settings.onfloor, settings.draging):
                 return
@@ -1916,9 +1911,9 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
             # M3.2: a clip really starts: the walk in progress (if any) ends here.
             self._life_walk_end()
             if pose_name.endswith("_walk") or pose_name == "follow_cursor":
-                self._mia_log("walk", "start %s x=%d" % (pose_name, self.pos().x()))
+                self._companion_log("walk", "start %s x=%d" % (pose_name, self.pos().x()))
             if interact == 'followTarget':
-                self._mia_start_follow_cursor()
+                self._companion_start_follow_cursor()
                 return
             self.workers['Animation'].pause()
             loop = loop or self._life_loops_clip(pose_name)
@@ -1930,71 +1925,71 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
                 self.workers['Interaction'].start_interact(interact, pose_name, loop=loop)
             if from_touch:
                 self._life_touch_reaction()
-            # Mia: platica por clip (contrato mia-mood punto 5) -- frase
-            # instantanea de data/mia_lines.json al arrancar una pose "con
-            # significado"; nunca pisa el globo de _mia_ask (zonas de toque
+            # Platica por clip -- frase
+            # instantanea de data/companion_lines.json al arrancar una pose "con
+            # significado"; nunca pisa el globo de _companion_ask (zonas de toque
             # ya piden su propia frase al LLM con fallback fijo).
-            self._mia_maybe_say_pose_line(pose_name)
-            director = getattr(self, 'mia_director', None)
+            self._companion_maybe_say_pose_line(pose_name)
+            director = getattr(self, 'companion_director', None)
             if director is not None and director._combos:
                 director.note_action(pose_name)
         except Exception:
             logging.getLogger(__name__).exception(
-                "_mia_play_pose fallo (silenciado) para pose=%r", pose_name)
+                "_companion_play_pose fallo (silenciado) para pose=%r", pose_name)
 
-    _MIA_TOUCH_REACTION_POSES = ("patpat", "pinch", "touch_body")
+    _COMPANION_TOUCH_REACTION_POSES = ("patpat", "pinch", "touch_body")
 
-    def _mia_maybe_say_pose_line(self, pose_name: str) -> None:
-        """Contrato mia-mood punto 5: probabilidad (config, default 0.5;
+    def _companion_maybe_say_pose_line(self, pose_name: str) -> None:
+        """Probabilidad (config, default 0.5;
         1.0 en reacciones a toques) de frase instantanea al arrancar una
-        pose con significado. Nunca rompe nada si falta mia_lines.json."""
+        pose con significado. Nunca rompe nada si falta companion_lines.json."""
         if settings.petname == 'Draconia':
             return  # Reaction controller owns balloons, no duplicate pose emission.
         try:
-            from DyberPet.mia_director import (
+            from DyberPet.companion_director import (
                 MEANINGFUL_POSES, load_lines, pick_line, should_say_line,
             )
             if pose_name not in MEANINGFUL_POSES:
                 return
-            if getattr(self, "_mia_chat_bubble_visible", False):
+            if getattr(self, "_companion_chat_bubble_visible", False):
                 return  # no pisa un globo que ya esta en pantalla
-            cfg = getattr(self, "_mia_mood_table", None)
+            cfg = getattr(self, "_companion_mood_table", None)
             prob = 0.5
             try:
-                brain_data = json.loads(self._mia_brain_path().read_text(encoding="utf-8"))
+                brain_data = json.loads(self._companion_brain_path().read_text(encoding="utf-8"))
                 prob = float(brain_data.get("mood_lines", {}).get("prob", 0.5))
             except Exception:
                 pass
-            is_touch = pose_name in self._MIA_TOUCH_REACTION_POSES
-            if not should_say_line(self.mia_director.rng, is_touch, prob):
+            is_touch = pose_name in self._COMPANION_TOUCH_REACTION_POSES
+            if not should_say_line(self.companion_director.rng, is_touch, prob):
                 return
-            lines = load_lines(self._mia_lines_path())
-            recent = getattr(self, "_mia_recent_lines", [])
-            dominant = getattr(self.mia_mood, "dominant", "content")
-            line = pick_line(lines, pose_name, dominant, recent, self.mia_director.rng)
+            lines = load_lines(self._companion_lines_path())
+            recent = getattr(self, "_companion_recent_lines", [])
+            dominant = getattr(self.companion_mood, "dominant", "content")
+            line = pick_line(lines, pose_name, dominant, recent, self.companion_director.rng)
             if not line:
                 return
-            self._mia_recent_lines = (recent + [line])[-5:]
-            self._emit_mia_bubble(line)
+            self._companion_recent_lines = (recent + [line])[-5:]
+            self._emit_companion_bubble(line)
         except Exception:
-            logging.getLogger(__name__).exception("_mia_maybe_say_pose_line fallo (silenciado)")
+            logging.getLogger(__name__).exception("_companion_maybe_say_pose_line fallo (silenciado)")
 
-    def _mia_start_follow_cursor(self) -> None:
+    def _companion_start_follow_cursor(self) -> None:
         """Comportamiento 4: seguir el cursor 5-10s y parar solo
-        (contrato-motor.md). Reusa MouseMoveManager/followTarget existente
+. Reusa MouseMoveManager/followTarget existente
         (follow_mouse_act, atado antes solo al menu)."""
         if settings.onfloor == 0 or settings.draging == 1:
             return
-        from DyberPet.mia_director import choose_follow_duration
+        from DyberPet.companion_director import choose_follow_duration
         self.MouseTracker = MouseMoveManager()
         self.MouseTracker.moved.connect(self.update_mouse_position)
         self.get_positions('mouse')
         self.workers['Animation'].pause()
         self.workers['Interaction'].start_interact('followTarget', 'mouse')
-        duration_s = choose_follow_duration(self.mia_director.rng)
-        QTimer.singleShot(int(duration_s * 1000), self._mia_stop_follow_cursor)
+        duration_s = choose_follow_duration(self.companion_director.rng)
+        QTimer.singleShot(int(duration_s * 1000), self._companion_stop_follow_cursor)
 
-    def _mia_stop_follow_cursor(self) -> None:
+    def _companion_stop_follow_cursor(self) -> None:
         try:
             if getattr(self, "MouseTracker", None) is not None:
                 self.MouseTracker._listener.stop()
@@ -2002,10 +1997,10 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
             if getattr(self.workers.get('Interaction'), 'interact', None) == 'followTarget':
                 self.workers['Interaction'].stop_interact()
         except Exception:
-            logging.getLogger(__name__).exception("_mia_stop_follow_cursor fallo (silenciado)")
+            logging.getLogger(__name__).exception("_companion_stop_follow_cursor fallo (silenciado)")
 
-    def _mia_micro_context(self) -> dict:
-        """Contexto que lee MiaMicroTicker en cada tick corto (comportamientos
+    def _companion_micro_context(self) -> dict:
+        """Contexto que lee CompanionMicroTicker en cada tick corto (comportamientos
         5/7/8/9/10: mirar al cursor, patalear, bordes, hablar, parpadeo)."""
         interaction = self.workers.get('Interaction') if hasattr(self, 'workers') else None
         state = getattr(interaction, 'interact', None) or 'default'
@@ -2013,12 +2008,12 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
 
         at_edge = None
         if getattr(self, 'current_screen', None) is not None:
-            # Mia (multimonitor): solo cuentan los bordes de fuera del escritorio.
-            from DyberPet.mia_director import outer_edge
+            # Multimonitor: solo cuentan los bordes de fuera del escritorio.
+            from DyberPet.companion_director import outer_edge
             at_edge = outer_edge(list(settings.screens) if settings.screens else [self.current_screen],
                                  self.current_screen, self.pos().x(), self.width())
 
-        # Mia: trepar paredes (contrato trepar-paredes). screen_top/height en
+        # Trepar paredes (contrato trepar-paredes). screen_top/height en
         # coordenadas logicas Qt de SU pantalla actual; pos_y/floor_y es el
         # tope del sprite hoy (si no esta trepando, floor_y == pos_y).
         # current_screen is already a QRect (availableGeometry at init, screen.geometry() on monitor switch).
@@ -2036,155 +2031,155 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
             # D2.2: no yawn when she falls asleep while falling (she is not on the floor).
             "on_floor": settings.onfloor == 1,
             "at_edge": at_edge,
-            "chat_bubble_visible": getattr(self, "_mia_chat_bubble_visible", False),
+            "chat_bubble_visible": getattr(self, "_companion_chat_bubble_visible", False),
             "chat_bubble_text": "",
-            # Mia: gancho C2 (sueno de verdad) y C4 (peek con clip dedicado si existe).
-            "sleeping": bool(getattr(self.mia_director, "is_asleep", False))
+            # Gancho C2 (sueno de verdad) y C4 (peek con clip dedicado si existe).
+            "sleeping": bool(getattr(self.companion_director, "is_asleep", False))
                         and not bool(getattr(getattr(self, "talk_controller", None), "active", False)),
             # M3: a walk heading into the wall she already touches (re-decide turn/peek/climb).
             "walking_toward": life_walking_toward(state),
-            "available_poses": self._mia_available_poses(),
+            "available_poses": self._companion_available_poses(),
             "pos_y": float(self.pos().y()),
             "floor_y": float(self.pos().y()),
             "screen_top": float(screen_top),
             "screen_height": float(screen_height),
         }
 
-    def _mia_apply_cursor_flip(self, flip: bool) -> None:
+    def _companion_apply_cursor_flip(self, flip: bool) -> None:
         """Comportamiento 5: voltea el frame default hacia el cursor. El
         flip real se aplica en set_img() (ganchos de pocas lineas) leyendo
         este flag."""
-        self._mia_cursor_flip = flip
+        self._companion_cursor_flip = flip
 
-    def _mia_on_edge(self, side: str) -> None:
+    def _companion_on_edge(self, side: str) -> None:
         """Comportamiento 8 (C4 informe revisor 2): notifica el toque de
         borde para bitacora. turn/peek ya los decide y dispara
-        MiaMicroTicker._tick_edge (play_action/apply_cursor_flip), que es
+        CompanionMicroTicker._tick_edge (play_action/apply_cursor_flip), que es
         quien conoce el reloj inyectado y peek_duration(); duplicar la
         decision aqui con otro rng.uniform() desincronizaria la secuencia
         determinista que usan los tests."""
-        self._mia_log("borde", side)
+        self._companion_log("borde", side)
 
-    # --- Mia: voz en ingles (contrato-voz-en.md) ----------------------------
+    # --- Voz en ingles ------------------------------------------------------
 
-    def _mia_brain_path(self) -> Path:
+    def _companion_brain_path(self) -> Path:
         # perfil: cada personaje activo busca su propio brain primero
-        # (contrato MiniDraconia parte B, char_profile.py); Mia conserva
-        # exactamente la ruta de siempre.
+        # (contrato MiniDraconia parte B, char_profile.py); sin perfil propio
+        # conserva exactamente la ruta de siempre.
         from DyberPet import char_profile
         return char_profile.brain_path(Path(settings.CONFIGDIR) / 'data', settings.petname)
 
-    # --- Mia: animo con continuidad (contrato mia-mood) ---------------------
+    # --- Animo con continuidad ----------------------------------------------
 
-    def _mia_mood_path(self) -> Path:
+    def _companion_mood_path(self) -> Path:
         # perfil: animo propio por personaje (contrato MiniDraconia parte B
-        # punto 6); Mia conserva exactamente la ruta de siempre.
+        # punto 6); sin perfil propio conserva exactamente la ruta de siempre.
         from DyberPet import char_profile
         return char_profile.mood_path(Path(settings.CONFIGDIR) / 'data', settings.petname)
 
-    def _mia_lines_path(self) -> Path:
+    def _companion_lines_path(self) -> Path:
         # perfil: frases instantaneas propias por personaje.
         from DyberPet import char_profile
         return char_profile.lines_path(Path(settings.CONFIGDIR) / 'data', settings.petname)
 
-    def _mia_own_lines_or_none(self) -> Optional[dict]:
+    def _companion_own_lines_or_none(self) -> Optional[dict]:
         """Lines del perfil propio del personaje activo, o None si no tiene
-        uno (Mia/Kitty/ChrisKitty, contrato punto 8: sin cambios de
+        uno (Kitty/ChrisKitty, contrato punto 8: sin cambios de
         comportamiento para ellos)."""
         from DyberPet import char_profile
-        from DyberPet.mia_director import load_lines
+        from DyberPet.companion_director import load_lines
         data_dir = Path(settings.CONFIGDIR) / 'data'
         if not char_profile.has_own_profile(data_dir, settings.petname):
             return None
         return load_lines(char_profile.lines_path(data_dir, settings.petname))
 
-    def _mia_fallback_line(self, key: str) -> str:
+    def _companion_fallback_line(self, key: str) -> str:
         """LINES[key] (ingles) salvo que el personaje activo tenga sus
         propias frases (contrato punto 7: nunca en ingles para Draconia)."""
-        from DyberPet.mia_director import fallback_line
-        return fallback_line(key, self._mia_own_lines_or_none())
+        from DyberPet.companion_director import fallback_line
+        return fallback_line(key, self._companion_own_lines_or_none())
 
-    def _mia_mood_touch_fallback(self, mood_pose: str) -> str:
+    def _companion_mood_touch_fallback(self, mood_pose: str) -> str:
         """Respaldo del toque con animo (B2, FAIL t_ea577267): antes
         DyberPet.py usaba MOOD_TOUCH_LINES (ingles fijo) sin mirar el
         perfil activo, asi que Draconia enojada/timida/aburrida con
         Ollama caido salia en ingles. Ahora prueba primero las lineas
         propias del perfil (p.ej. draconia_lines.json ya trae angry,
-        shy, bored, peek, pinch); sin perfil propio (Mia/Kitty/
+        shy, bored, peek, pinch); sin perfil propio (Kitty/
         ChrisKitty) cae exactamente a MOOD_TOUCH_LINES de siempre."""
-        from DyberPet.mia_director import mood_touch_fallback_line
-        return mood_touch_fallback_line(mood_pose, self._mia_own_lines_or_none())
+        from DyberPet.companion_director import mood_touch_fallback_line
+        return mood_touch_fallback_line(mood_pose, self._companion_own_lines_or_none())
 
-    def _mia_save_mood(self) -> None:
-        """Guarda data/mia_mood.json (contrato punto 6: cada minuto y al
+    def _companion_save_mood(self) -> None:
+        """Guarda data/companion_mood.json (contrato punto 6: cada minuto y al
         cerrar). Nunca rompe nada si el disco falla."""
         try:
-            self.mia_mood.save(self._mia_mood_path())
+            self.companion_mood.save(self._companion_mood_path())
         except Exception:
-            logging.getLogger(__name__).exception("_mia_save_mood fallo (silenciado)")
+            logging.getLogger(__name__).exception("_companion_save_mood fallo (silenciado)")
 
-    def _mia_note_mood_event(self, kind: str, **meta) -> None:
+    def _companion_note_mood_event(self, kind: str, **meta) -> None:
         """Registra un evento de animo (pat/touch_body/pinch/drag/fall/chat/
-        climb_top/zero_returns) y deja constancia en mia_talk.log si cambia
+        climb_top/zero_returns) y deja constancia en talk.log si cambia
         la emocion dominante (contrato punto 7: \"animo <emocion>\")."""
         try:
-            new_dominant = self.mia_mood.record(kind, **meta)
-            self._mia_handle_dominant_change(new_dominant)
+            new_dominant = self.companion_mood.record(kind, **meta)
+            self._companion_handle_dominant_change(new_dominant)
         except Exception:
-            logging.getLogger(__name__).exception("_mia_note_mood_event fallo (silenciado)")
+            logging.getLogger(__name__).exception("_companion_note_mood_event fallo (silenciado)")
 
-    def _mia_mood_tick(self) -> None:
+    def _companion_mood_tick(self) -> None:
         """Aplica el decaimiento de MoodEngine con el paso del tiempo real
-        (contrato mia-mood punto 1/2: aburrimiento por inactividad, energia
-        de noche, decaimiento hacia la base), enganchado a MiaDirector.tick()
+        (aburrimiento por inactividad, energia de noche, decaimiento hacia
+        la base), enganchado a CompanionDirector.tick()
         (8-20 s, corre aunque el pet este dormido/ocupado/arrastrandose; a
         diferencia de un timer de 60 s, este sigue el mismo reloj que ya usa
         el director y no depende de un QTimer adicional). Deja constancia
-        en mia_talk.log y en el menu igual que los eventos discretos."""
+        en talk.log y en el menu igual que los eventos discretos."""
         try:
-            new_dominant = self.mia_mood.tick()
-            self._mia_handle_dominant_change(new_dominant)
+            new_dominant = self.companion_mood.tick()
+            self._companion_handle_dominant_change(new_dominant)
         except Exception:
-            logging.getLogger(__name__).exception("_mia_mood_tick fallo (silenciado)")
+            logging.getLogger(__name__).exception("_companion_mood_tick fallo (silenciado)")
 
-    def _mia_handle_dominant_change(self, new_dominant) -> None:
+    def _companion_handle_dominant_change(self, new_dominant) -> None:
         """Bitacora + menu + clip visible cuando CAMBIA la dominante (fix
         B1, t_a82d63b9: \"cuando la dominante cambia a angry/shy/bored, el
         director reproduce ese clip una vez (con frase)\"); compartido por
-        _mia_note_mood_event y _mia_mood_tick."""
-        if not new_dominant or new_dominant == self._mia_mood_dominant_seen:
+        _companion_note_mood_event y _companion_mood_tick."""
+        if not new_dominant or new_dominant == self._companion_mood_dominant_seen:
             return
-        self._mia_mood_dominant_seen = new_dominant
-        self._mia_log("animo", new_dominant)
-        if getattr(self, "mia_mood_menu_entry", None) is not None:
-            self.mia_mood_menu_entry.setText(self.tr("Mood: ") + new_dominant)
-        from DyberPet.mia_director import should_play_mood_clip
+        self._companion_mood_dominant_seen = new_dominant
+        self._companion_log("animo", new_dominant)
+        if getattr(self, "companion_mood_menu_entry", None) is not None:
+            self.companion_mood_menu_entry.setText(self.tr("Mood: ") + new_dominant)
+        from DyberPet.companion_director import should_play_mood_clip
         if should_play_mood_clip(new_dominant):
-            self._mia_play_mood_clip(new_dominant)
+            self._companion_play_mood_clip(new_dominant)
 
-    def _mia_play_mood_clip(self, dominant: str) -> None:
+    def _companion_play_mood_clip(self, dominant: str) -> None:
         """Reproduce el clip de `dominant` una vez, con frase garantizada
-        (no al azar): si _mia_play_pose ya mostro una linea instantanea por
+        (no al azar): si _companion_play_pose ya mostro una linea instantanea por
         probabilidad, no se duplica (fix B1, t_a82d63b9)."""
         try:
-            self._mia_play_pose(dominant)
-            if not getattr(self, "_mia_chat_bubble_visible", False):
-                from DyberPet.mia_director import load_lines, pick_line
-                lines = load_lines(self._mia_lines_path())
-                recent = getattr(self, "_mia_recent_lines", [])
-                line = pick_line(lines, dominant, dominant, recent, self.mia_director.rng)
+            self._companion_play_pose(dominant)
+            if not getattr(self, "_companion_chat_bubble_visible", False):
+                from DyberPet.companion_director import load_lines, pick_line
+                lines = load_lines(self._companion_lines_path())
+                recent = getattr(self, "_companion_recent_lines", [])
+                line = pick_line(lines, dominant, dominant, recent, self.companion_director.rng)
                 if line:
-                    self._mia_recent_lines = (recent + [line])[-5:]
-                    self._emit_mia_bubble(line)
+                    self._companion_recent_lines = (recent + [line])[-5:]
+                    self._emit_companion_bubble(line)
         except Exception:
-            logging.getLogger(__name__).exception("_mia_play_mood_clip fallo (silenciado)")
+            logging.getLogger(__name__).exception("_companion_play_mood_clip fallo (silenciado)")
 
-    def _toggle_mia_voice(self, checked: bool) -> None:
+    def _toggle_companion_voice(self, checked: bool) -> None:
         """Menu del pet -> toggle de voz. Lee/escribe `voice.enabled` en
-        mia_brain.json (la config se relee en cada frase, no hace falta
+        companion_brain.json (la config se relee en cada frase, no hace falta
         reiniciar)."""
-        from DyberPet.mia_voice import load_voice_config
-        path = self._mia_brain_path()
+        from DyberPet.companion_voice import load_voice_config
+        path = self._companion_brain_path()
         try:
             data = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
         except (OSError, json.JSONDecodeError):
@@ -2200,11 +2195,11 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
         except OSError:
             pass
         if not checked:
-            self.mia_voice.shutdown()
+            self.companion_voice.shutdown()
 
     def _toggle_relay_voice(self, checked: bool) -> None:
         """Menu -> Voice (self-hosted relay mode): writes `relay_voice` in the profile's brain file."""
-        path = self._mia_brain_path()
+        path = self._companion_brain_path()
         try:
             data = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
         except (OSError, json.JSONDecodeError):
@@ -2218,13 +2213,13 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
         except OSError:
             pass
         if not checked:
-            self.mia_voice.shutdown()
+            self.companion_voice.shutdown()
 
-    def _mia_start_climb_fall(self) -> None:
-        """Mia: se suelta de la pared y cae con la física de soltarla con el ratón
+    def _companion_start_climb_fall(self) -> None:
+        """Se suelta de la pared y cae con la física de soltarla con el ratón
         (mismo camino que mouseReleaseEvent con set_fall), con un empujoncito
         hacia fuera de la pared."""
-        side = getattr(getattr(self.mia_micro_ticker, "_climb", None), "side", None)
+        side = getattr(getattr(self.companion_micro_ticker, "_climb", None), "side", None)
         settings.onfloor = 0
         settings.draging = 0
         settings.prefall = 1
@@ -2234,12 +2229,12 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
         self.workers['Animation'].pause()
         self.workers['Interaction'].start_interact('mousedrag')
 
-    def _toggle_mia_climb(self, checked: bool) -> None:
+    def _toggle_companion_climb(self, checked: bool) -> None:
         """Menu del pet -> toggle "Climb walls" (contrato trepar-paredes).
-        Lee/escribe `climb.enabled` en mia_brain.json y actualiza el
+        Lee/escribe `climb.enabled` en companion_brain.json y actualiza el
         MicroTicker en caliente (no hace falta reiniciar)."""
-        from DyberPet.mia_director import load_climb_config
-        path = self._mia_brain_path()
+        from DyberPet.companion_director import load_climb_config
+        path = self._companion_brain_path()
         try:
             data = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
         except (OSError, json.JSONDecodeError):
@@ -2257,163 +2252,98 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
             path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         except OSError:
             pass
-        if hasattr(self, "mia_micro_ticker"):
-            self.mia_micro_ticker._climb_cfg = climb_cfg
+        if hasattr(self, "companion_micro_ticker"):
+            self.companion_micro_ticker._climb_cfg = climb_cfg
 
-    def _mia_show_status_report(self) -> None:
-        """Menu -> "Status report" (contrato-voz-en.md punto 3). Los datos
-        se recogen en un hilo de fondo; el LLM solo redacta a partir de
-        ese JSON exacto (nunca inventa cifras)."""
-        from DyberPet.mia_status import collect_status_data, build_status_prompt
-        from DyberPet.mia_voice import load_voice_config, effective_language
-
-        def worker():
-            data = collect_status_data()
-            voice_cfg = load_voice_config(self._mia_brain_path())
-            lang = effective_language(self.local_brain.cfg.get("language", "en"),
-                                       voice_cfg.get("enabled", False), voice_cfg.get("lang"))
-            return build_status_prompt(data, language=lang)
-
-        thread = QThread(self)
-        runner = _MiaChatWorker(worker)
-        self._mia_status_runner = runner  # Mia: referencia viva, igual que en el chat escrito.
-        runner.moveToThread(thread)
-        thread.started.connect(runner.run)
-        runner.finished.connect(self._mia_on_status_prompt_ready)
-        runner.finished.connect(thread.quit)
-        thread.finished.connect(runner.deleteLater)
-        thread.finished.connect(thread.deleteLater)
-        self._mia_status_thread = thread
-        thread.start()
-
-    def _mia_on_status_prompt_ready(self, prompt: str) -> None:
-        greet_line = self._mia_fallback_line("greet")
-        if not self._mia_ask(prompt, fallback=greet_line):
-            self._emit_mia_bubble(greet_line)
-
-    def _mia_show_briefing(self) -> None:
-        """Menu -> "Today's briefing" (contrato-voz-en.md punto 4). Solo
-        lectura de archivo local, sin red; un globo por parrafo."""
-        from DyberPet.mia_status import read_briefing
-        briefing_dir = Path(r"provided-assets")
-        paragraphs = read_briefing(briefing_dir)
-        self._mia_briefing_queue = list(paragraphs[1:])
-        self._emit_mia_bubble(paragraphs[0])
-        self._mia_briefing_last_text = paragraphs[0]
-        self._mia_show_next_briefing_paragraph()
-
-    def _mia_show_next_briefing_paragraph(self) -> None:
-        queue = getattr(self, "_mia_briefing_queue", [])
-        if not queue:
-            return
-        next_text = queue.pop(0)
-        delay_ms = int(bubble_duration_s(self._mia_briefing_last_text) * 1000)
-
-        def _show_it():
-            self._emit_mia_bubble(next_text)
-            self._mia_briefing_last_text = next_text
-            self._mia_show_next_briefing_paragraph()
-
-        QTimer.singleShot(delay_ms, _show_it)
-
-    def _send_mia_greeting(self) -> None:
+    def _send_companion_greeting(self) -> None:
         """Comportamiento 2: anima greet/happy y pide a Ollama una frase de
-        saludo; si Ollama no responde, globo fijo en espanol.
-
-        Mia: contrato-voz-en.md punto 3 -- si `reports.morning` esta activo
-        en mia_brain.json, el saludo dispara el status report en vez del
-        saludo fijo de siempre."""
+        saludo; si Ollama no responde, globo fijo en espanol."""
         if settings.petname == 'Draconia':
-            self._mia_play_pose('greet')
+            self._companion_play_pose('greet')
             self._conv_event('greet')
             return
-        self._mia_play_pose('greet')
-        from DyberPet.mia_status import load_reports_config, mia_greeting_flow
-        reports_cfg = load_reports_config(self._mia_brain_path())
-        if mia_greeting_flow(reports_cfg) == "status":
-            self._mia_show_status_report()
-            return
-        from DyberPet.mia_director import greeting_prompt
+        self._companion_play_pose('greet')
+        from DyberPet.companion_director import greeting_prompt
         from datetime import datetime as _dt
-        greet_line = self._mia_fallback_line("greet")
-        if not self._mia_ask(greeting_prompt(_dt.now()),
+        greet_line = self._companion_fallback_line("greet")
+        if not self._companion_ask(greeting_prompt(_dt.now()),
                              fallback=greet_line):
-            self._emit_mia_bubble(greet_line)
+            self._emit_companion_bubble(greet_line)
 
-    def _send_mia_bye(self) -> None:
+    def _send_companion_bye(self) -> None:
         """Comportamiento 3: despedida al cerrar, globo fijo corto, no
         bloquea el cierre mas de 2.5 s (no llamamos a Ollama aqui: no hay
         tiempo garantizado de responder dentro del limite)."""
         if settings.petname == 'Draconia':
-            self._mia_play_pose('bye')
+            self._companion_play_pose('bye')
             self._conv_send_bye()
             return
-        self._mia_play_pose('bye')
-        self._emit_mia_bubble(self._mia_fallback_line("bye"))
+        self._companion_play_pose('bye')
+        self._emit_companion_bubble(self._companion_fallback_line("bye"))
 
-    # --- Mia: chat escrito (comportamiento 12, docs/contrato-chat.txt) ------
+    # --- Chat escrito (comportamiento 12) -----------------------------------
 
-    def _open_mia_chat(self) -> None:
-        # Mia: abrir el chat cuenta como interaccion (comportamiento 4/12).
-        self.mia_director.note_interaction()
-        if self.mia_chat_box is not None and self.mia_chat_box.isVisible():
-            self.mia_chat_box.setFocus()
+    def _open_companion_chat(self) -> None:
+        # Abrir el chat cuenta como interaccion (comportamiento 4/12).
+        self.companion_director.note_interaction()
+        if self.companion_chat_box is not None and self.companion_chat_box.isVisible():
+            self.companion_chat_box.setFocus()
             return
-        self.mia_chat_box = ChatBox(self)
-        self.mia_chat_box.message_sent.connect(self._on_mia_chat_sent)
+        self.companion_chat_box = ChatBox(self)
+        self.companion_chat_box.message_sent.connect(self._on_companion_chat_sent)
         # Wide enough for the whole hint (a fixed 220 px box clipped it).
-        hint = self.mia_chat_box.fontMetrics().horizontalAdvance(self.mia_chat_box.placeholderText())
-        self.mia_chat_box.setFixedWidth(max(220, hint + 34))
-        x = self.pos().x() + self.width() // 2 - self.mia_chat_box.width() // 2
+        hint = self.companion_chat_box.fontMetrics().horizontalAdvance(self.companion_chat_box.placeholderText())
+        self.companion_chat_box.setFixedWidth(max(220, hint + 34))
+        x = self.pos().x() + self.width() // 2 - self.companion_chat_box.width() // 2
         y = self.pos().y() - 40
-        self.mia_chat_box.move(x, y)
-        self.mia_chat_box.show()
-        self.mia_chat_box.setFocus()
+        self.companion_chat_box.move(x, y)
+        self.companion_chat_box.show()
+        self.companion_chat_box.setFocus()
 
-    def _on_mia_chat_sent(self, text: str) -> None:
-        director = getattr(self, 'mia_director', None)
+    def _on_companion_chat_sent(self, text: str) -> None:
+        director = getattr(self, 'companion_director', None)
         if director is not None and hasattr(director, 'note_activity'):
             director.note_activity()     # D2.1: no random nap within 3 minutes of a typed message
         if getattr(self, '_conv_brain', None) is not None:
             # Draconia: typed chat goes to the active mode (relay, own key) or offline lines.
             self._conv_chat(text)
             return
-        self._mia_play_pose('think')
-        chat_cfg = load_chat_config(self._mia_brain_path())
+        self._companion_play_pose('think')
+        chat_cfg = load_chat_config(self._companion_brain_path())
         brain_cfg = self.local_brain.cfg
-        # Mia: contrato-voz-en.md punto 2 -- con la voz activada se fuerza
+        # Con la voz activada se fuerza
         # el idioma a ingles tambien en el chat escrito.
-        from DyberPet.mia_voice import load_voice_config, effective_language
+        from DyberPet.companion_voice import load_voice_config, effective_language
         from DyberPet.local_brain import system_prompt_for_language
-        voice_cfg = load_voice_config(self._mia_brain_path())
+        voice_cfg = load_voice_config(self._companion_brain_path())
         lang = effective_language(brain_cfg.get("language", "en"),
                                    voice_cfg.get("enabled", False), voice_cfg.get("lang"))
         system_prompt = system_prompt_for_language(brain_cfg, lang)
-        # Mia: el primer mensaje del chat puede pillar el modelo en frio
+        # El primer mensaje del chat puede pillar el modelo en frio
         # (keep_alive expirado); usa 45s de timeout esa vez, luego 20s.
-        is_first_call = not getattr(self, "_mia_chat_had_first_reply", False)
-        self._mia_chat_had_first_reply = True
+        is_first_call = not getattr(self, "_companion_chat_had_first_reply", False)
+        self._companion_chat_had_first_reply = True
 
         def worker():
             # brain: only explicit chat uses the configurable MiniDraconia provider.
             from DyberPet.brain import explicit_chat
-            return explicit_chat(text, self.mia_chat_history.as_list())
+            return explicit_chat(text, self.companion_chat_history.as_list())
 
         thread = QThread(self)
-        runner = _MiaChatWorker(worker)
-        self._mia_chat_runner = runner  # Mia: referencia viva (si no, Python lo recoge y el chat nunca responde)
+        runner = _CompanionChatWorker(worker)
+        self._companion_chat_runner = runner  # Referencia viva (si no, Python lo recoge y el chat nunca responde)
         runner.moveToThread(thread)
         thread.started.connect(runner.run)
-        runner.finished.connect(lambda reply: self._on_mia_chat_reply(text, reply))
+        runner.finished.connect(lambda reply: self._on_companion_chat_reply(text, reply))
         runner.finished.connect(thread.quit)
         thread.finished.connect(runner.deleteLater)
         thread.finished.connect(thread.deleteLater)
-        self._mia_chat_thread = thread
+        self._companion_chat_thread = thread
         thread.start()
 
-    def _on_mia_chat_reply(self, user_text: str, reply: str) -> None:
-        self.mia_chat_history.add_turn(user_text, reply)
-        self._emit_mia_bubble(reply)
+    def _on_companion_chat_reply(self, user_text: str, reply: str) -> None:
+        self.companion_chat_history.add_turn(user_text, reply)
+        self._emit_companion_bubble(reply)
 
     def _process_greeting_mssg(self, bubble_dict:dict):
         self.bubble_manager.add_usertag(bubble_dict, 'end', send=True)
@@ -2604,19 +2534,19 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
 
     def patpat(self):
         if settings.petname == 'Draconia':
-            from DyberPet.mia_director import detect_touch_zone
-            point = getattr(self, '_mia_last_click_pos', None)
+            from DyberPet.companion_director import detect_touch_zone
+            point = getattr(self, '_companion_last_click_pos', None)
             point = self.label.mapFrom(self, point) if point is not None else None
             zone = detect_touch_zone(self.label.width(), self.label.height(),
                                      point.x(), point.y()) if point is not None else 'head'
             self._draconia_react(zone)
             return
         # 摸摸动画
-        # Mia: zona de toque segun donde cayo el clic (comportamiento 6/B2):
+        # Zona de toque segun donde cayo el clic (comportamiento 6/B2):
         # cabeza -> patpat (igual que antes), mejilla/cuerpo -> pinch/touch_body
         # si la pose existe (si no, cae al comportamiento de cabeza de siempre).
-        from DyberPet.mia_director import detect_touch_zone, TOUCH_ZONE_ACTIONS
-        click_pos = getattr(self, "_mia_last_click_pos", None)
+        from DyberPet.companion_director import detect_touch_zone, TOUCH_ZONE_ACTIONS
+        click_pos = getattr(self, "_companion_last_click_pos", None)
         zone = "head"
         if click_pos is not None and self.label.width() and self.label.height():
             zone = detect_touch_zone(self.label.width(), self.label.height(),
@@ -2631,30 +2561,30 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
             if settings.focus_timer_on:
                 self.bubble_manager.trigger_bubble("pat_focus")
             else:
-                # Mia: animo (fix B1, t_a82d63b9) -- se registra el evento
+                # Animo (fix B1, t_a82d63b9) -- se registra el evento
                 # PRIMERO para que la pose y la frase de este mismo toque
                 # reflejen el animo ya actualizado (asi la caricia que
                 # ablanda angry se nota de inmediato, no un toque despues).
                 mood_kind = "pinch" if zone == "cheek" else ("touch_body" if zone == "body" else "pat")
-                self._mia_note_mood_event(mood_kind)
-                mood_pose = self.mia_director.touch_mood_pose(zone)
+                self._companion_note_mood_event(mood_kind)
+                mood_pose = self.companion_director.touch_mood_pose(zone)
                 if mood_pose:
-                    from DyberPet.mia_director import resolve_pose, MOOD_TOUCH_PROMPTS, MOOD_TOUCH_LINES
-                    available = self._mia_available_poses() | set(
+                    from DyberPet.companion_director import resolve_pose, MOOD_TOUCH_PROMPTS, MOOD_TOUCH_LINES
+                    available = self._companion_available_poses() | set(
                         settings.act_data.allAct_params.get(settings.petname, {}).keys())
-                    self._mia_play_pose(resolve_pose(mood_pose, available), from_touch=True)
-                    self._mia_ask(MOOD_TOUCH_PROMPTS.get(mood_pose, zone_prompt),
-                                  fallback=self._mia_mood_touch_fallback(mood_pose))
+                    self._companion_play_pose(resolve_pose(mood_pose, available), from_touch=True)
+                    self._companion_ask(MOOD_TOUCH_PROMPTS.get(mood_pose, zone_prompt),
+                                  fallback=self._companion_mood_touch_fallback(mood_pose))
                 elif zone != "head" and zone_pose in getattr(self.pet_conf, "act_dict", {}).keys() | \
                         set(settings.act_data.allAct_params.get(settings.petname, {}).keys()):
-                    self._mia_play_pose(zone_pose, from_touch=True)
-                    self._mia_ask(zone_prompt, fallback=self._mia_fallback_line("touch"))
+                    self._companion_play_pose(zone_pose, from_touch=True)
+                    self._companion_ask(zone_prompt, fallback=self._companion_fallback_line("touch"))
                 else:
                     self.workers['Animation'].pause()
                     self.workers['Interaction'].start_interact('patpat')
                     self._life_touch_reaction()
-                    # Mia habla si Ollama está vivo; si no, el globo aleatorio de siempre.
-                    self._mia_ask(zone_prompt, fallback=self._mia_fallback_line("pat"))
+                    # Habla si Ollama está vivo; si no, el globo aleatorio de siempre.
+                    self._companion_ask(zone_prompt, fallback=self._companion_fallback_line("pat"))
 
         # 概率触发浮动的心心
         prob_num_0 = random.uniform(0, 1)
@@ -2701,21 +2631,21 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
         关闭窗口, 系统退出
         :return:
         """
-        # Mia: animo con continuidad (contrato mia-mood punto 6) -- guarda
-        # data/mia_mood.json al cerrar, ademas del guardado cada minuto.
-        self._mia_save_mood()
-        # Mia: despedida corta (comportamiento 3). processEvents con tope de
+        # Animo con continuidad -- guarda
+        # data/companion_mood.json al cerrar, ademas del guardado cada minuto.
+        self._companion_save_mood()
+        # Despedida corta (comportamiento 3). processEvents con tope de
         # 2.5 s para que el globo/anim alcancen a mostrarse sin bloquear el
         # cierre mas de eso.
         try:
-            self._send_mia_bye()
+            self._send_companion_bye()
             deadline = QElapsedTimer()
             deadline.start()
             while deadline.elapsed() < 1500:
                 QApplication.processEvents()
                 time.sleep(0.05)
             if getattr(self, '_conv_brain', None) is not None:
-                self.mia_voice.shutdown()
+                self.companion_voice.shutdown()
                 if self._conv_finish_bye():
                     # The remote goodbye was too slow: give the offline one a moment on screen.
                     while deadline.elapsed() < 2500:
@@ -2963,8 +2893,8 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
         self.workers['Animation'].wall_side = lambda: getattr(self, '_life_wall', None)
         # D2.3: its random walks follow the director's rule: the side with room for a whole walk.
         self.workers['Animation'].walk_room = lambda: getattr(self, '_life_room', None)
-        director = getattr(self, 'mia_director', None)
-        if director is not None and getattr(self, '_mia_idle_pool', None):
+        director = getattr(self, 'companion_director', None)
+        if director is not None and getattr(self, '_companion_idle_pool', None):
             self.workers['Animation'].idle_picker = director.pick_idle_pose
 
         # Start the thread
@@ -3073,18 +3003,18 @@ class PetWidget(QWidget, PetLifeMixin, ConversationMixin):
 
         # 正在做动作的情况，局限在当前屏幕内
         else:
-            # Mia (multimonitor): si al caminar el centro pasa a otra pantalla, cambia de
+            # Multimonitor: si al caminar el centro pasa a otra pantalla, cambia de
             # pantalla en vez de chocar contra la costura y quedarse en la principal.
-            from DyberPet.mia_director import neighbor_screen
+            from DyberPet.companion_director import neighbor_screen
             _nb = neighbor_screen(list(settings.screens) if settings.screens else [],
                                   self.current_screen, new_x + self.width() // 2, new_y + self.height() - 5)
             if _nb is not None:
-                from DyberPet.mia_director import entry_center_x
+                from DyberPet.companion_director import entry_center_x
                 _from = self.current_screen
                 self.switch_screen(_nb)
                 new_x = entry_center_x(_from, self.current_screen) - self.width() // 2
                 new_y = self.floor_pos + settings.current_anchor[1]
-                self._mia_log("screen", "cross to %s" % _nb.name())
+                self._companion_log("screen", "cross to %s" % _nb.name())
             new_x, new_y = self.limit_in_screen(new_x, new_y, on_action=True)
             if int_x != 0 and plus_y == 0:
                 # M3.2: a walk step; the walk ends after 4 steps the screen edge clamped to zero.

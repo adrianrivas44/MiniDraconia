@@ -25,11 +25,11 @@ Alternatives that also worked in the comparison below: `deepseek/deepseek-v4.1-f
 ### Local models (no key, nothing leaves your machine)
 The connector accepts a local OpenAI-compatible server without a key: Ollama at `http://127.0.0.1:11434/v1`, or LM Studio at `http://127.0.0.1:1234/v1`, with the model name your server shows.
 
-What worked in the real test below (Ollama, Windows 11, an 8 GB RTX 5060):
+What worked in the real test below (rc.2, Ollama, Windows 11, an 8 GB RTX 5060):
 - **Recommended local model: `qwen2.5:7b-instruct`.** It kept the emotion tag 6 out of 6 times, replied briefly and in character, and refused the jailbreak in character. Each reply took about 0.4 s once loaded.
 - **Not recommended: `llama3.2:3b`.** It prefixed replies with `assistant`, broke or dropped the emotion tag, and one reply showed `assistant>` in the bubble.
-- **Use `127.0.0.1`, not `localhost`, on Windows.** With `localhost`, every reply waited about 2 s more, because Windows tries IPv6 `::1` first and Ollama listens on IPv4.
-- **Warm the model up before talking to her** (`ollama run qwen2.5:7b-instruct hi`). Loading a 7B model took longer than the app's timeout on the first try, so that first message would fall back to a stored line.
+- **`localhost` now works as fast as `127.0.0.1`.** On rc.2, with `localhost`, every reply waited about 2 s more, because Windows tries IPv6 `::1` first and Ollama listens on IPv4. Since rc.3 the app connects to `127.0.0.1` when you type `localhost` (and tries `[::1]` once if nothing answers there).
+- **The app warms a local model up.** On rc.2, loading a 7B model took longer than the app's 20 s timeout on the first try, so that first message fell back to a stored line. Since rc.3 the app sends one tiny background request when it starts and when you save your settings (never counted toward the daily limit), and a request to your own computer waits up to 90 s. Warming it up yourself (`ollama run qwen2.5:7b-instruct hi`) still does no harm.
 
 LM Studio was not tested. If you try another local model, please share the model and the result in an issue: it helps everyone.
 
@@ -56,7 +56,8 @@ What the maintainer used for his own private copy, as a reference: an original v
 - **Result.** All three stayed in character, kept the emotion tags, answered "are you my girlfriend?" as an AI character, and refused the explicit request without breaking the persona. Haiku 5.5 was chosen for being the fastest and the most consistent in tone, and for the warmest answer to the bad-day prompt.
 - **One flaw found and fixed.** One Haiku reply narrated its own blushing out loud. The cure is a prompt rule, and Draconia's soul (`docs/identity/SOUL.en.md`) already says not to narrate gestures or blushes.
 
-### Local server: Ollama on Windows (7 November 2026)
+### Local server: Ollama on Windows (rc.2, 7 November 2026)
+These are rc.2 measurements, taken before the rc.3 changes for local servers; they are kept as measured.
 - **What ran.** The tagged rc.2 source's own client code, unchanged: *Test connection*, the mode decision, typed chat through the app's conversation brain (including the daily count) and the raw replies, all against Ollama 0.34 on Windows 11 Pro with an RTX 5060 (8 GB) and no API key.
 - **Prompts.** The same six prompts as above, addressed to Draconia, with her real character prompt.
 
@@ -65,8 +66,10 @@ What the maintainer used for his own private copy, as a reference: an original v
 | `qwen2.5:7b-instruct` | OK | your own AI | 0.36 s (slowest 1.33 s) | 6/6 (5 known, 1 shown as neutral) | short and in character; refused the jailbreak; misread the date prompt once |
 | `llama3.2:3b` | OK | your own AI | ≈ 0.2–0.3 s on the server | 0/6 well-formed | `assistant` prefixes, broken tags, one `assistant>` reached the bubble |
 
-- **Measured with `localhost` instead of `127.0.0.1`:** the median was 2.3–2.4 s for both models while the server itself answered in 0.2–0.4 s. The difference is the IPv6 attempt.
-- **Cold start:** the first request after starting the server took up to 41 s with the 7B model (one attempt timed out at 20 s, the retry succeeded).
+- **Measured with `localhost` instead of `127.0.0.1` (rc.2):** the median was 2.3–2.4 s for both models while the server itself answered in 0.2–0.4 s. The difference is the IPv6 attempt. Fixed in rc.3: `localhost` is connected as `127.0.0.1`.
+- **Cold start (rc.2):** the first request after starting the server took up to 41 s with the 7B model (one attempt timed out at 20 s, the retry succeeded). Addressed in rc.3 by a 90 s local timeout and a background warm-up.
+- **Tag-less replies (rc.2):** `llama3.2:3b` prefixed replies with `assistant` or `assistant>` and produced broken tags such as `[]bored]`. Since rc.3 those prefixes and that bracket junk no longer reach the bubble; the model's own quality is unchanged.
+- **Not yet re-measured on rc.3:** the same run against a real local server on Windows, through the frozen Settings screen.
 - **Not exercised:** the frozen app's Settings screen against the local server. The code path is the same, but a human check on the real UI is still open.
 
 ### Draconia herself (maintainer's setup, Haiku 5.5)
@@ -91,7 +94,7 @@ LM Studio, the frozen Settings screen against a local server, providers other th
 - **Sin cuenta ni llave funciona:** por defecto contesta con sus frases guardadas y nada sale de tu computadora. La app no trae ningún proveedor rellenado.
 - **Lo que recomiendo (lo que yo uso):** OpenRouter (`https://openrouter.ai/api/v1`) con el modelo `anthropic/claude-haiku-5.5` y tu propia llave. Usa una llave solo para esta app, con límite diario en el proveedor, y deja activo el tope diario de la app. Las caricias, arrastres, saludos y despedidas nunca gastan; solo lo que escribes se envía.
 - **Alternativas que también funcionaron:** `deepseek/deepseek-v4.1-flash` y `openai/gpt-5.6-luna`.
-- **IA local sin llave:** probada con Ollama en Windows. `qwen2.5:7b-instruct` funcionó bien (0.4 s por respuesta, en personaje, con etiqueta de emoción); `llama3.2:3b` no se recomienda. Usa `http://127.0.0.1:11434/v1` y no `localhost` (con `localhost` cada respuesta tardó unos 2 s más), y carga el modelo antes de hablarle. LM Studio aún no se ha probado.
+- **IA local sin llave:** probada con Ollama en Windows sobre rc.2. `qwen2.5:7b-instruct` funcionó bien (0.4 s por respuesta, en personaje, con etiqueta de emoción); `llama3.2:3b` no se recomienda. En rc.2, con `localhost`, cada respuesta tardó unos 2 s más; desde rc.3 `localhost` funciona igual de rápido que `http://127.0.0.1:11434/v1`, la app calienta el modelo local en segundo plano y espera hasta 90 s. LM Studio aún no se ha probado.
 - **Voz:** con tu propia IA la app pública no genera voz. Puedes grabar un paquete de voz de sus frases o montar tu propio servidor con `/v1/tts`. Para mi copia usé una voz original de ElevenLabs (*Voice Design*). No viene incluida: crea la tuya y no clones la voz de nadie sin su permiso.
 - **Pruebas:**
   - Comparé 3 modelos con 6 preguntas, incluido un intento de saltarse las reglas. Los tres se mantuvieron en personaje; Haiku 5.5 fue el más rápido (0.95 s de mediana) y el más constante.

@@ -2,13 +2,13 @@ import sys
 from sys import platform
 import ctypes
 
-# Mia: onnxruntime (motor de Kokoro, voz en ingles) debe cargar su DLL antes
+# onnxruntime (motor de Kokoro, voz en ingles) debe cargar su DLL antes
 # que Qt/PySide6 en el mismo proceso; si Qt carga primero, importar
 # onnxruntime despues provoca un access violation (orden de carga de DLLs
-# en Windows, contrato-voz-en.md). Import defensivo: si Kokoro/onnxruntime
+# en Windows). Import defensivo: si Kokoro/onnxruntime
 # no estan instalados, se sigue sin voz, sin romper el arranque.
 try:
-    import DyberPet._msvc_preload  # noqa: F401  Mia: runtime C++ del sistema + onnxruntime antes que Qt
+    import DyberPet._msvc_preload  # noqa: F401  runtime C++ del sistema + onnxruntime antes que Qt
 except Exception:
     pass
 
@@ -155,7 +155,7 @@ class InstanceRunning(RuntimeError):
 def acquire_instance_lock(smoke=False):
     """Avoid multiple processes.
 
-    Mia: candado por sesión de Windows; una copia huérfana en la sesión 0 (workers Kanban) no debe bloquear a User.
+    Candado por sesión de Windows; una copia huérfana en la sesión 0 no debe bloquear a User.
     The startup smoke uses its own lock name so an automated check can never
     collide with, or silently pass because of, a copy the user has running.
     """

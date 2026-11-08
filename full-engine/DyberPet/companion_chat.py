@@ -1,7 +1,7 @@
-"""Chat escrito con Mia (comportamiento 12, docs/contrato-chat.txt).
+"""Chat escrito con la mascota (comportamiento 12).
 
-Reemplaza la voz/TTS anulada por User. User puede escribirle a Mia en una
-caja de texto flotante; Mia responde en su globo usando el modelo local
+Reemplaza la voz/TTS anulada por User. User puede escribirle en una
+caja de texto flotante; ella responde en su globo usando el modelo local
 (Ollama) con un historial corto en memoria (no se persiste a disco).
 
 Este modulo contiene las funciones puras (testeables sin Qt): construccion
@@ -26,7 +26,7 @@ except Exception:  # pragma: no cover - entorno sin Qt (no deberia pasar en runt
     QLineEdit = object  # type: ignore
 
 
-BRAIN_CONFIG_NAME = "mia_brain.json"
+BRAIN_CONFIG_NAME = "companion_brain.json"
 
 DEFAULT_CHAT_CONFIG = {
     "max_turns": 8,
@@ -62,7 +62,7 @@ def load_chat_config(brain_path: Path) -> dict:
 def build_messages(system_prompt: str, history: List[dict], user_text: str,
                     max_turns: int = 8) -> List[dict]:
     """Arma la lista de mensajes para /api/chat: system + ultimos
-    `max_turns` turnos (usuario+Mia, osea 2*max_turns mensajes) + el nuevo
+    `max_turns` turnos (usuario+mascota, osea 2*max_turns mensajes) + el nuevo
     mensaje del usuario.
     """
     trimmed = history[-(max_turns * 2):] if max_turns > 0 else []
@@ -83,13 +83,13 @@ def bubble_duration_s(text: str, per_char_s: float = 0.05, min_s: float = 4.0,
 
 
 # ---------------------------------------------------------------------------
-# Pregunta a Mia con fallback cuando Ollama no responde
+# Pregunta a la mascota con fallback cuando Ollama no responde
 # ---------------------------------------------------------------------------
 
-def ask_mia(chat_fn: Callable[[List[dict], dict], Optional[str]], system_prompt: str,
+def ask_companion(chat_fn: Callable[[List[dict], dict], Optional[str]], system_prompt: str,
             history: List[dict], user_text: str, cfg: dict) -> str:
     """`chat_fn(messages, cfg) -> str|None` hace la llamada real a Ollama.
-    Se inyecta para poder testear sin red. Devuelve el texto de Mia o el
+    Se inyecta para poder testear sin red. Devuelve el texto de la mascota o el
     mensaje de fallback si `chat_fn` devuelve None.
     """
     max_turns = cfg.get("max_turns", DEFAULT_CHAT_CONFIG["max_turns"])
@@ -126,20 +126,20 @@ def wrap_text(text: str, measure_fn: Callable[[str], int], max_width_px: int = 2
 
 
 # ---------------------------------------------------------------------------
-# Globo de Mia listo para register_bubble.emit (contrato-chat.txt punto 4):
+# Globo de la mascota listo para register_bubble.emit:
 # wrap_text + bubble_duration_s usados juntos en runtime.
 # ---------------------------------------------------------------------------
 
-def build_mia_chat_bubble(text: str, measure_fn: Callable[[str], int],
+def build_companion_chat_bubble(text: str, measure_fn: Callable[[str], int],
                            max_width_px: int = 280) -> dict:
     """Arma el dict que espera `register_bubble.emit` para un globo
-    `mia_chat`: texto con saltos de linea segun `wrap_text` y `timeout`
+    `companion_chat`: texto con saltos de linea segun `wrap_text` y `timeout`
     (segundos) segun `bubble_duration_s`, ambos en runtime (antes se
     importaban pero no se usaban, M1 del informe del revisor).
     """
     lines = wrap_text(text, measure_fn, max_width_px)
     return {
-        "bubble_type": "mia_chat",
+        "bubble_type": "companion_chat",
         "message": "\n".join(lines),
         "icon": None,
         "start_audio": None,
@@ -153,15 +153,15 @@ def build_mia_chat_bubble(text: str, measure_fn: Callable[[str], int],
 # ---------------------------------------------------------------------------
 
 class ChatHistory:
-    """Guarda los ultimos `max_turns` turnos (usuario+Mia) en memoria."""
+    """Guarda los ultimos `max_turns` turnos (usuario+mascota) en memoria."""
 
     def __init__(self, max_turns: int = 8):
         self.max_turns = max_turns
         self._messages: List[dict] = []
 
-    def add_turn(self, user_text: str, mia_text: str) -> None:
+    def add_turn(self, user_text: str, companion_text: str) -> None:
         self._messages.append({"role": "user", "content": user_text})
-        self._messages.append({"role": "assistant", "content": mia_text})
+        self._messages.append({"role": "assistant", "content": companion_text})
         cutoff = self.max_turns * 2
         if len(self._messages) > cutoff:
             self._messages = self._messages[-cutoff:]
