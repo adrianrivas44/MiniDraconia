@@ -45,17 +45,17 @@
 - The public ZIP never contains a relay seed, a key file or a voice pack; the shared asset policy, the builder and the release scanner refuse them, and a build input of another product fails the build.
 - The character soul (`docs/identity/SOUL.en.md`) is bundled for the own-key mode. No new dependencies.
 
-## 1.0.0-rc.1 — local preparation, not published
+## 1.0.0-rc.1 — first community prerelease (published 2026-11-04)
 
 ### Preserved baseline
 - Windows desktop companion, animated reactions and predefined English offline lines.
 - Local per-user preferences/state, Settings and Quit.
 - Per-clip approval gate for prerecorded voice playback.
 
-### Preparation scope
-- Correct the missing normal startup module in the frozen package.
-- Check normal startup separately from the scripted selftest.
-- Prepare source dependencies, test/build instructions, contribution templates and identity documentation.
-- Inventory third-party licenses, assets and privacy before public release.
+### Scope
+- Corrected the missing normal startup module in the frozen package.
+- Normal startup checked separately from the scripted selftest.
+- Source dependencies, test/build instructions, contribution templates and identity documentation.
+- Inventory of third-party licenses, assets and privacy; open rights items stay listed in `docs/RELEASE-CHECKLIST.md`.
 
 This is a scope record, not proof every acceptance gate has passed. See the release checklist for actual gate status. No local language model, AI provider integration or general AI conversation was included in rc.1.

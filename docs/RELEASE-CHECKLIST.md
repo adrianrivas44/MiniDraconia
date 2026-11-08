@@ -29,6 +29,7 @@ An item is checked only with evidence attached to the publication record. Techni
 - [ ] Public tree names nothing of a private setup (private-word check and `scripts/scan_release.py`, with the maintainer's own `.release-private-markers`, both clean on the exact tagged commit).
 - [ ] No AI provider preset: a new profile shows empty base URL and model and stays offline; *Test connection* and *Save* refuse empty fields.
 - [ ] Your-own-AI mode exercised against a real hosted endpoint with a test key (text only, daily limit, *Forget key*) and against a real local server without a key.
+  - Local half done on 2026-11-07: the tagged source's own client (Test connection, mode choice, typed chat, daily count) against a real Ollama on Windows 11 with no key; results in `docs/RECOMMENDED-SETUP.md`. The hosted half and the frozen UI path are still open.
 - [ ] Self-hosted relay protocol in `docs/SELF-HOSTED-RELAY.md` exercised against a real relay (health, chat, voice); the public ZIP has no seed.
 - [ ] Human review on a real display: walks travel without visible skating and look where they go, broom climb, talking, sit pose, the new mirror/quill/yawn clips, the icon, crisp frames at 150 %.
 - [ ] Character, art (including the three new clips and the icon), voice and identity-document provenance/rights resolved. Public availability does not resolve third-party rights.

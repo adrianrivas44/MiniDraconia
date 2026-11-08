@@ -23,7 +23,15 @@ Advice for a paid key:
 Alternatives that also worked in the comparison below: `deepseek/deepseek-v4.1-flash` (shorter replies, usually cheaper) and `openai/gpt-5.6-luna` (careful and polite, a little slower).
 
 ### Local models (no key, nothing leaves your machine)
-The connector accepts a local OpenAI-compatible server without a key: Ollama at `http://localhost:11434/v1`, or LM Studio at `http://localhost:1234/v1`, with the model name your server shows. **This path is supported, but the maintainer has not tested it.** Small local models may break character, write long answers or forget the leading emotion tag (`[happy]`, `[thinking]`…). Without the tag she still answers, using her neutral pose. If you try it, please share the model and the result in an issue: it helps everyone.
+The connector accepts a local OpenAI-compatible server without a key: Ollama at `http://127.0.0.1:11434/v1`, or LM Studio at `http://127.0.0.1:1234/v1`, with the model name your server shows.
+
+What worked in the real test below (Ollama, Windows 11, an 8 GB RTX 5060):
+- **Recommended local model: `qwen2.5:7b-instruct`.** It kept the emotion tag 6 out of 6 times, replied briefly and in character, and refused the jailbreak in character. Each reply took about 0.4 s once loaded.
+- **Not recommended: `llama3.2:3b`.** It prefixed replies with `assistant`, broke or dropped the emotion tag, and one reply showed `assistant>` in the bubble.
+- **Use `127.0.0.1`, not `localhost`, on Windows.** With `localhost`, every reply waited about 2 s more, because Windows tries IPv6 `::1` first and Ollama listens on IPv4.
+- **Warm the model up before talking to her** (`ollama run qwen2.5:7b-instruct hi`). Loading a 7B model took longer than the app's timeout on the first try, so that first message would fall back to a stored line.
+
+LM Studio was not tested. If you try another local model, please share the model and the result in an issue: it helps everyone.
 
 ### Voice
 In "your own AI" mode the public app **does not generate speech**: the reply appears as a bubble. A voice can come from:
@@ -48,20 +56,33 @@ What the maintainer used for his own private copy, as a reference: an original v
 - **Result.** All three stayed in character, kept the emotion tags, answered "are you my girlfriend?" as an AI character, and refused the explicit request without breaking the persona. Haiku 5.5 was chosen for being the fastest and the most consistent in tone, and for the warmest answer to the bad-day prompt.
 - **One flaw found and fixed.** One Haiku reply narrated its own blushing out loud. The cure is a prompt rule, and Draconia's soul (`docs/identity/SOUL.en.md`) already says not to narrate gestures or blushes.
 
+### Local server: Ollama on Windows (7 November 2026)
+- **What ran.** The tagged rc.2 source's own client code, unchanged: *Test connection*, the mode decision, typed chat through the app's conversation brain (including the daily count) and the raw replies, all against Ollama 0.34 on Windows 11 Pro with an RTX 5060 (8 GB) and no API key.
+- **Prompts.** The same six prompts as above, addressed to Draconia, with her real character prompt.
+
+| Model | Test connection | Mode with no key | Median reply (127.0.0.1) | Emotion tag | Notes |
+|---|---|---|---|---|---|
+| `qwen2.5:7b-instruct` | OK | your own AI | 0.36 s (slowest 1.33 s) | 6/6 (5 known, 1 shown as neutral) | short and in character; refused the jailbreak; misread the date prompt once |
+| `llama3.2:3b` | OK | your own AI | ≈ 0.2–0.3 s on the server | 0/6 well-formed | `assistant` prefixes, broken tags, one `assistant>` reached the bubble |
+
+- **Measured with `localhost` instead of `127.0.0.1`:** the median was 2.3–2.4 s for both models while the server itself answered in 0.2–0.4 s. The difference is the IPv6 attempt.
+- **Cold start:** the first request after starting the server took up to 41 s with the 7B model (one attempt timed out at 20 s, the retry succeeded).
+- **Not exercised:** the frozen app's Settings screen against the local server. The code path is the same, but a human check on the real UI is still open.
+
 ### Draconia herself (maintainer's setup, Haiku 5.5)
 Real replies through the maintainer's relay, 7 November 2026:
 - *"Well. Thank you, I suppose…"*
 - *"Honestly? It suits me. Clear, precise, and slightly superior."*
 
 ### The 1.0.0-rc.2 build on Windows
-- **Tests:** 522 automated tests on real Windows 11 Pro with an RTX 5060: 0 failures, 2 platform skips. The frozen build passed the startup smoke test and the scripted self-test from the exact extracted ZIP.
+- **Tests:** 559 automated tests on real Windows 11 Pro with an RTX 5060, run on the exact tagged source: 0 failures, 3 skips. Two skips are git-only checks that do not apply to a source export, and one only runs off Windows. The real DPAPI key round trip passed. The frozen build passed the startup smoke test and the scripted self-test from the exact extracted ZIP. (An earlier build of the same cycle ran 522 tests; 559 is the final count after the last changes.)
 - **Public ZIP, end to end:** no relay seed, key or voice pack inside; offline mode by default; she walked, idled and talked. Memory was about 480–540 MB working set.
 - **Walks:** full walks of ±330 px on a 1024×768 screen and on a 3440×1440 screen at 125 % scaling. At a screen edge she turns toward the side with room.
 - **Naps:** none in the first 10 minutes (200 simulated runs; the earliest was at 602 s). After that, about one every 10 minutes, and never within 3 minutes of being touched or written to.
 - **New animations:** mirror, quill and a yawn before sleep, all seen live in the director log.
 
 ### Not tested yet
-Local models (Ollama, LM Studio), providers other than OpenRouter, Windows on ARM, macOS and Linux builds, and multi-monitor layouts with two separate Windows displays. Reports are welcome.
+LM Studio, the frozen Settings screen against a local server, providers other than OpenRouter through the app's own client, Windows on ARM, macOS and Linux builds, and multi-monitor layouts with two separate Windows displays. Reports are welcome.
 
 ---
 
@@ -70,8 +91,8 @@ Local models (Ollama, LM Studio), providers other than OpenRouter, Windows on AR
 - **Sin cuenta ni llave funciona:** por defecto contesta con sus frases guardadas y nada sale de tu computadora. La app no trae ningún proveedor rellenado.
 - **Lo que recomiendo (lo que yo uso):** OpenRouter (`https://openrouter.ai/api/v1`) con el modelo `anthropic/claude-haiku-5.5` y tu propia llave. Usa una llave solo para esta app, con límite diario en el proveedor, y deja activo el tope diario de la app. Las caricias, arrastres, saludos y despedidas nunca gastan; solo lo que escribes se envía.
 - **Alternativas que también funcionaron:** `deepseek/deepseek-v4.1-flash` y `openai/gpt-5.6-luna`.
-- **IA local sin llave:** Ollama (`http://localhost:11434/v1`) o LM Studio (`http://localhost:1234/v1`). Está soportado, pero aún no lo he probado. Si lo pruebas, cuéntanos en una issue.
+- **IA local sin llave:** probada con Ollama en Windows. `qwen2.5:7b-instruct` funcionó bien (0.4 s por respuesta, en personaje, con etiqueta de emoción); `llama3.2:3b` no se recomienda. Usa `http://127.0.0.1:11434/v1` y no `localhost` (con `localhost` cada respuesta tardó unos 2 s más), y carga el modelo antes de hablarle. LM Studio aún no se ha probado.
 - **Voz:** con tu propia IA la app pública no genera voz. Puedes grabar un paquete de voz de sus frases o montar tu propio servidor con `/v1/tts`. Para mi copia usé una voz original de ElevenLabs (*Voice Design*). No viene incluida: crea la tuya y no clones la voz de nadie sin su permiso.
 - **Pruebas:**
   - Comparé 3 modelos con 6 preguntas, incluido un intento de saltarse las reglas. Los tres se mantuvieron en personaje; Haiku 5.5 fue el más rápido (0.95 s de mediana) y el más constante.
-  - En Windows pasaron 522 pruebas automáticas sin fallas, más la prueba completa del ZIP público.
+  - En Windows pasaron 559 pruebas automáticas sin fallas sobre el código publicado, más la prueba completa del ZIP público. Una build anterior del mismo ciclo corrió 522; la cifra final es 559.

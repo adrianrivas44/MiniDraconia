@@ -133,8 +133,8 @@ class ConnectYourAiDoc(unittest.TestCase):
     def test_covers_any_endpoint_local_servers_cap_key_and_what_is_sent(self):
         text = read('docs/CONNECT-YOUR-AI.md')
         low = text.lower()
-        for needle in ('openai-compatible', '/chat/completions', 'http://localhost:11434/v1',
-                       'http://localhost:1234/v1', bc().PLACEHOLDER_BASE_URL, bc().PLACEHOLDER_MODEL,
+        for needle in ('openai-compatible', '/chat/completions', 'http://127.0.0.1:11434/v1',
+                       'http://127.0.0.1:1234/v1', bc().PLACEHOLDER_BASE_URL, bc().PLACEHOLDER_MODEL,
                        'daily request limit', 'dpapi', 'forget key', 'what is sent', 'no key',
                        'never sent over plain http://', '## en español'):
             self.assertIn(needle.lower(), low, needle)

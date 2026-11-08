@@ -26,10 +26,15 @@ A key is required for any endpoint that is not on your own computer, and **an AP
 
 A local OpenAI-compatible server works too, and needs no key. Typical base URLs:
 
-- Ollama: `http://localhost:11434/v1`
-- LM Studio: `http://localhost:1234/v1`
+- Ollama: `http://127.0.0.1:11434/v1`
+- LM Studio: `http://127.0.0.1:1234/v1`
 
-Start the server, load or pull a model in it, then enter that base URL and the model's name as the server lists it. Leave the API key empty. Only `localhost`, `127.0.0.1` and `::1` count as your own computer; any other address needs a key and `https://`. If you do enter a key for a local server, it is sent to that local server only.
+Start the server, load or pull a model in it, then enter that base URL and the model's name as the server lists it. Leave the API key empty.
+
+Two tips from a real test with Ollama on Windows (see [RECOMMENDED-SETUP.md](RECOMMENDED-SETUP.md)):
+
+- **Prefer `127.0.0.1` to `localhost`.** On Windows `localhost` resolves to the IPv6 address `::1` first; Ollama listens on IPv4 only, so every request waited about 2 seconds before falling back. With `127.0.0.1` the same replies took about 0.4 s.
+- **Warm the model up first** (for example `ollama run <model> hi`). The first request after the server starts has to load the model; a 7B model took longer than the app's timeout on the first try, so that first message falls back to a stored line. Only `localhost`, `127.0.0.1` and `::1` count as your own computer; any other address needs a key and `https://`. If you do enter a key for a local server, it is sent to that local server only.
 
 ## Test connection
 
@@ -78,6 +83,6 @@ See [privacy](PRIVACY.md) for everything she keeps on your computer.
 
 ## En español
 
-*Connect your own AI* no apunta a ningún proveedor: la URL base y el modelo empiezan vacíos y tú los escribes. Funciona con cualquier servicio compatible con OpenAI (`/chat/completions`): pega la URL base y el nombre del modelo que documenta tu servicio, y tu clave API. Un servidor en tu propio equipo no necesita clave: por ejemplo Ollama en `http://localhost:11434/v1` o LM Studio en `http://localhost:1234/v1`. Cualquier otra dirección necesita clave y `https://`; la clave nunca se envía por `http://` sin cifrar a otro equipo.
+*Connect your own AI* no apunta a ningún proveedor: la URL base y el modelo empiezan vacíos y tú los escribes. Funciona con cualquier servicio compatible con OpenAI (`/chat/completions`): pega la URL base y el nombre del modelo que documenta tu servicio, y tu clave API. Un servidor en tu propio equipo no necesita clave: por ejemplo Ollama en `http://127.0.0.1:11434/v1` o LM Studio en `http://127.0.0.1:1234/v1`. En Windows usa `127.0.0.1` y no `localhost` (con `localhost` cada respuesta tardó unos 2 segundos más), y carga el modelo antes de hablarle (`ollama run <modelo> hi`). Cualquier otra dirección necesita clave y `https://`; la clave nunca se envía por `http://` sin cifrar a otro equipo.
 
 *Test connection* hace una sola petición mínima y no cuenta para el límite. Un límite diario de peticiones (200 por defecto, editable) la detiene; al pasarlo responde con sus frases guardadas hasta el día siguiente. Tu clave se guarda cifrada con Windows DPAPI y nunca se muestra ni se registra; *Forget key* la borra y vuelve al modo sin conexión. Solo se envía lo que escribes en *Talk to Draconia*, la conversación escrita reciente y el prompt del personaje; los toques y demás eventos del escritorio nunca se envían.
