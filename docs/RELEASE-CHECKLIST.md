@@ -33,8 +33,8 @@ An item is checked only with evidence attached to the publication record. Techni
   - Private-word test and `scripts/scan_release.py` with the maintainer's markers clean on `ea4261b`.
 - [x] No AI provider preset: a new profile shows empty base URL and model and stays offline; *Test connection* and *Save* refuse empty fields.
   - Covered by the Settings tests on Linux and Windows (empty fields, offline, refusals).
-- [x] Your-own-AI mode exercised against a real hosted endpoint with a test key (text only, daily limit, *Forget key*) and against a real local server without a key.
-  - Checked after publication with the tagged client: a hosted endpoint (Test connection, wrong key, six typed replies, daily limit) and a real Ollama server on Windows with no key; results in `docs/RECOMMENDED-SETUP.md`. *Forget key* is covered by the Windows key-store tests, not by a hosted run.
+- [ ] Your-own-AI mode exercised against a real hosted endpoint with a test key (text only, daily limit, *Forget key*) and against a real local server without a key.
+  - Checked after publication with the tagged client: a hosted endpoint (Test connection, wrong key, six typed replies, daily limit) and a real Ollama server on Windows with no key; results in `docs/RECOMMENDED-SETUP.md`. *Forget key* is covered by the Windows key-store tests, not by a hosted run. Still open: *Forget key* was not exercised against a hosted endpoint, so this item stays unchecked.
   - Local half done on 2026-11-07: the tagged source's own client (Test connection, mode choice, typed chat, daily count) against a real Ollama on Windows 11 with no key; results in `docs/RECOMMENDED-SETUP.md`. The hosted half and the frozen UI path are still open.
 - [ ] Self-hosted relay protocol in `docs/SELF-HOSTED-RELAY.md` exercised against a real relay (health, chat, voice); the public ZIP has no seed.
 - [ ] Human review on a real display: walks travel without visible skating and look where they go, broom climb, talking, sit pose, the new mirror/quill/yawn clips, the icon, crisp frames at 150 %.
@@ -63,8 +63,8 @@ Same rule: an item is checked only with evidence attached to the publication rec
 - [x] Opt-in live test `tests/test_live_endpoints.py` run on Windows against a real local server with `MINIDRACONIA_LIVE_LOCAL_URL` and `MINIDRACONIA_LIVE_LOCAL_MODEL` set and no key.
   - Ran in the Windows test run against Ollama (`http://localhost:11434/v1`, `qwen2.5:7b-instruct`, no key): passed.
 - [ ] The frozen app's Settings screen exercised against a real local server (Test connection, Save, a typed chat) by a person on a real display.
-- [x] Your-own-AI mode against a real hosted endpoint with a test key (text only, daily limit, *Forget key*); hosted timeouts unchanged at 20 s.
-  - Hosted run on 2026-11-07 with the rc.2 client, unchanged for hosted endpoints in rc.3 (20 s timeout covered by tests): Test connection, wrong key, six typed replies, daily limit. *Forget key* is covered by the Windows key-store tests.
+- [ ] Your-own-AI mode against a real hosted endpoint with a test key (text only, daily limit, *Forget key*); hosted timeouts unchanged at 20 s.
+  - Hosted run on 2026-11-07 with the rc.2 client, unchanged for hosted endpoints in rc.3 (20 s timeout covered by tests): Test connection, wrong key, six typed replies, daily limit. *Forget key* is covered by the Windows key-store tests. Still open: *Forget key* was not exercised against a hosted endpoint, so this item stays unchecked.
 - [x] `RELEASE-NOTES.md` test-result placeholders replaced with the real results, or the unrun checks named as not run.
   - Filled in with the results above; unrun checks are named as not run.
 - [ ] Human review on a real display of the items still open from rc.2 (walks, broom climb, talking, sit pose, mirror/quill/yawn, the icon, crisp frames at 150 %).
